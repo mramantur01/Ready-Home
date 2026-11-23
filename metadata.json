@@ -1,0 +1,6 @@
+{
+  "name": "READY HOME — Ремонт квартир и домов в Бишкеке",
+  "description": "Студия дизайнерского ремонта квартир и домов под ключ в Бишкеке с интерактивным 3D-конструктором ремонта, калькулятором сметы, онлайн-записью, личным кабинетом и CRM-админкой.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
