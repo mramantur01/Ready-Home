@@ -854,8 +854,8 @@ export function createApp() {
       res.json({ ok: true, configured: false });
       return;
     }
-    if (!/^[A-Za-z0-9_-]{30,}$/.test(key)) {
-      res.status(400).json({ error: 'Это не похоже на ключ Gemini (обычно начинается с AIza…).' });
+    if (!/^[A-Za-z0-9._-]{30,}$/.test(key)) {
+      res.status(400).json({ error: 'Это не похоже на ключ Gemini. Скопируйте ключ целиком из aistudio.google.com/apikey.' });
       return;
     }
     const problem = await testKey(key);
