@@ -38,7 +38,7 @@ import { CATEGORY_LABELS, formatKgs, STATUS_LABELS, tLoc, UI_COPY } from './i18n
 import { apiFetch } from './apiClient.ts';
 import { SmartImage } from './components/SmartImage.tsx';
 import { LazyStudio3D } from './components/LazyStudio3D.tsx';
-import { CalculatorSection } from './components/CalculatorSection.tsx';
+import { HeroCompact } from './components/HeroCompact.tsx';
 import { EstimateSection } from './components/EstimateSection.tsx';
 import { QuickLeadModal } from './components/QuickLeadModal.tsx';
 import { AiChatWidget } from './components/AiChatWidget.tsx';
@@ -339,9 +339,6 @@ export default function App() {
             <a href="#services" className="hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap shrink-0">
               {copy.nav.services}
             </a>
-            <a href="#calculator" className="hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap shrink-0">
-              {copy.nav.calculator}
-            </a>
             <a href="#estimate" className="hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap shrink-0">
               {copy.nav.estimate}
             </a>
@@ -474,9 +471,6 @@ export default function App() {
               <a href="#services" onClick={() => setMobileMenuOpen(false)} className="py-1.5">
                 {copy.nav.services}
               </a>
-              <a href="#calculator" onClick={() => setMobileMenuOpen(false)} className="py-1.5">
-                {copy.nav.calculator}
-              </a>
               <a href="#estimate" onClick={() => setMobileMenuOpen(false)} className="py-1.5">
                 {copy.nav.estimate}
               </a>
@@ -518,161 +512,28 @@ export default function App() {
         )}
       </header>
 
-      {/* 3. FULL-WIDTH HERO SLIDER */}
-      <section className="relative overflow-hidden bg-[#0e172a] text-white">
-        <div className="relative min-h-[600px] lg:min-h-[660px] flex items-center">
-          {/* Background Slide Image + Measured Contrast Scrim */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentSlide.id}
-              initial={{ opacity: 0.25 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0.25 }}
-              transition={{ duration: 0.55 }}
-              className="absolute inset-0"
-            >
-              <SmartImage
-                src={currentSlide.image}
-                alt={tLoc(currentSlide.title, lang)}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-[#0c1425]/92 via-[#0c1425]/72 to-[#0c1425]/40" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#131d33] via-transparent to-black/20" />
-            </motion.div>
-          </AnimatePresence>
+      {/* 3. COMPACT HERO */}
+      <HeroCompact
+        content={content}
+        lang={lang}
+        slideIdx={slideIdx}
+        setSlideIdx={setSlideIdx}
+        avgRating={avgRating}
+        onCallMe={() => requestBooking({})}
+      />
 
-          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24 w-full">
-            <div
-              className={`max-w-2xl ${
-                currentSlide.textAlign === 'right' ? 'ml-auto text-right' : ''
-              }`}
-            >
-              <p className="text-sm font-medium text-amber-400 mb-3">
-                READY HOME · Бишкек, Кыргызстан
-              </p>
-              <h1
-                className="text-3xl sm:text-5xl lg:text-[54px] font-extrabold tracking-tight leading-[1.08] text-white"
-                style={{ textWrap: 'balance' }}
-              >
-                {tLoc(currentSlide.title, lang)}
-              </h1>
-              <p className="mt-5 text-base sm:text-lg text-slate-200 leading-relaxed max-w-xl">
-                {tLoc(currentSlide.subtitle, lang)}
-              </p>
-
-              {/* 4 Advantages */}
-              <div className="mt-7 grid sm:grid-cols-2 gap-x-6 gap-y-2.5 text-sm text-slate-200">
-                {[copy.hero.adv1, copy.hero.adv2, copy.hero.adv3, copy.hero.adv4].map((adv) => (
-                  <div key={adv} className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>{adv}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Hero CTAs */}
-              <div className="mt-9 flex flex-wrap items-center gap-3">
-                <a
-                  href="#studio3d"
-                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition-colors whitespace-nowrap"
-                >
-                  <Box className="w-4 h-4" />
-                  {copy.hero.cta3d}
-                </a>
-                <button
-                  type="button"
-                  onClick={() => requestBooking({})}
-                  className="inline-flex items-center gap-2 px-5 py-3.5 rounded-xl bg-white/12 hover:bg-white/20 border border-white/20 text-white font-semibold text-sm transition-colors whitespace-nowrap cursor-pointer"
-                >
-                  {copy.hero.ctaBook}
-                </button>
-                <a
-                  href="#calculator"
-                  className="px-4 py-3.5 rounded-xl border border-white/15 hover:border-amber-400 text-slate-100 text-sm font-medium transition-colors whitespace-nowrap"
-                >
-                  {copy.hero.ctaCalc}
-                </a>
-                <a
-                  href={`https://wa.me/${content.contacts.whatsapp}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="WhatsApp"
-                  className="p-3.5 rounded-xl bg-white/10 hover:bg-emerald-600 text-white transition-colors"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                </a>
-                <a
-                  href={`https://instagram.com/${content.contacts.instagram}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Instagram"
-                  className="p-3.5 rounded-xl bg-white/10 hover:bg-amber-500 hover:text-slate-950 text-white transition-colors"
-                >
-                  <Instagram className="w-4 h-4" />
-                </a>
-              </div>
-            </div>
-
-            {/* Slider Controls */}
-            {content.heroSlides.length > 1 && (
-              <div className="mt-10 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {content.heroSlides.map((s, idx) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => setSlideIdx(idx)}
-                      aria-label={`Слайд ${idx + 1}`}
-                      className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                        idx === slideIdx ? 'w-10 bg-amber-500' : 'w-4 bg-white/30 hover:bg-white/60'
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSlideIdx((i) => (i - 1 + content.heroSlides.length) % content.heroSlides.length)
-                    }
-                    aria-label="Предыдущий слайд"
-                    className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSlideIdx((i) => (i + 1) % content.heroSlides.length)}
-                    aria-label="Следующий слайд"
-                    className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Full-Width 4-Column KPI Strip Below Hero */}
-        <div className="border-t border-white/10 bg-[#0e172a]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              [copy.hero.stat1Val, copy.hero.stat1Lbl],
-              [copy.hero.stat2Val, copy.hero.stat2Lbl],
-              [copy.hero.stat3Val, copy.hero.stat3Lbl],
-              [avgRating + ' ★', copy.hero.stat4Lbl],
-            ].map(([val, lbl]) => (
-              <div key={lbl}>
-                <div className="text-2xl sm:text-3xl font-extrabold text-amber-400 tabular-nums">
-                  {val}
-                </div>
-                <div className="text-xs sm:text-sm text-slate-300 mt-0.5">{lbl}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* 6b. ITEMIZED ESTIMATE BY RENOVATION STAGE */}
+      <EstimateSection
+        priceList={content.priceList}
+        finishCatalog={content.finishCatalog}
+        installment={content.installment}
+        layouts={content.layouts}
+        portfolio={content.beforeAfter}
+        lang={lang}
+        contacts={content.contacts}
+        onBook={(draft) => requestBooking(draft)}
+        onSaveEstimate={handleSaveEstimate}
+      />
 
       {/* 4. INTERACTIVE 3D VISUAL RENOVATION STUDIO */}
       <LazyStudio3D
@@ -736,11 +597,11 @@ export default function App() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="flex overflow-x-auto snap-x snap-mandatory -mx-4 px-4 pb-3 md:mx-0 md:px-0 md:pb-0 md:overflow-visible md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {filteredServices.map((srv) => (
               <article
                 key={srv.id}
-                className="rounded-3xl bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col justify-between transition-transform duration-200 hover:-translate-y-0.5"
+                className="shrink-0 w-[82%] sm:w-[58%] md:w-auto snap-start rounded-3xl bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col justify-between transition-transform duration-200 hover:-translate-y-0.5"
               >
                 <div>
                   <div className="aspect-[4/3] overflow-hidden bg-slate-900">
@@ -793,26 +654,6 @@ export default function App() {
           </div>
         </div>
       </section>
-
-      {/* 6. PRICE CALCULATOR */}
-      <CalculatorSection
-        services={content.services}
-        lang={lang}
-        onBookWithParams={(draft) => requestBooking(draft)}
-      />
-
-      {/* 6b. ITEMIZED ESTIMATE BY RENOVATION STAGE */}
-      <EstimateSection
-        priceList={content.priceList}
-        finishCatalog={content.finishCatalog}
-        installment={content.installment}
-        layouts={content.layouts}
-        portfolio={content.beforeAfter}
-        lang={lang}
-        contacts={content.contacts}
-        onBook={(draft) => requestBooking(draft)}
-        onSaveEstimate={handleSaveEstimate}
-      />
 
       {/* 7. BEFORE / AFTER GALLERY */}
       <BeforeAfterSlider items={content.beforeAfter} lang={lang} />
@@ -911,14 +752,14 @@ export default function App() {
             </a>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="flex overflow-x-auto snap-x snap-mandatory -mx-4 px-4 pb-3 sm:mx-0 sm:px-0 sm:pb-0 sm:overflow-visible sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
             {content.instagramPosts.map((post) => (
               <a
                 key={post.id}
                 href={post.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group rounded-2xl overflow-hidden bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 flex flex-col"
+                className="shrink-0 w-[70%] sm:w-auto snap-start group rounded-2xl overflow-hidden bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 flex flex-col"
               >
                 <div className="aspect-square overflow-hidden bg-slate-900">
                   <SmartImage
@@ -955,11 +796,11 @@ export default function App() {
             <p className="mt-3 text-slate-600 dark:text-slate-300">{copy.masters.subtitle}</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="flex overflow-x-auto snap-x snap-mandatory -mx-4 px-4 pb-3 md:mx-0 md:px-0 md:pb-0 md:overflow-visible md:grid md:grid-cols-3 gap-4 md:gap-6">
             {content.masters.map((m) => (
               <div
                 key={m.id}
-                className="rounded-3xl bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col justify-between"
+                className="shrink-0 w-[82%] sm:w-[58%] md:w-auto snap-start rounded-3xl bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col justify-between"
               >
                 <div>
                   <div className="aspect-square overflow-hidden bg-slate-900">
@@ -1311,7 +1152,7 @@ export default function App() {
           <div className="flex flex-wrap items-center gap-5 text-xs font-medium text-slate-600 dark:text-slate-300">
             <a href="#studio3d" className="hover:text-amber-500">3D-Ремонт</a>
             <a href="#services" className="hover:text-amber-500">Услуги</a>
-            <a href="#calculator" className="hover:text-amber-500">Калькулятор</a>
+            <a href="#estimate" className="hover:text-amber-500">Смета</a>
             <a href="/remont/" className="hover:text-amber-500">Ремонт по планировкам</a>
             <a href="/ceny-na-remont" className="hover:text-amber-500">Цены на работы</a>
             <a href="#portfolio" className="hover:text-amber-500">До / После</a>

@@ -203,24 +203,37 @@ export function EstimateSection({
   const [qtyOverride, setQtyOverride] = useState<Record<string, number>>({});
   const [finishes, setFinishes] = useState<FinishChoices>(() => defaultFinishes(finishCatalog));
   const [areaText, setAreaText] = useState(String(DEFAULT_APARTMENT.areaSqm));
-  const [openStage, setOpenStage] = useState<WorkStageId | null>('walls_finish');
+  const [openStage, setOpenStage] = useState<WorkStageId | null>(null);
   const [previewIdx, setPreviewIdx] = useState<number | null>(null); // null = all done
   const [playing, setPlaying] = useState(false);
   const timer = useRef<number | null>(null);
   const [flash, setFlash] = useState('');
   const sectionRef = useRef<HTMLElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const [inSection, setInSection] = useState(false);
+  const [summaryVisible, setSummaryVisible] = useState(false);
 
   useEffect(() => {
     const el = sectionRef.current;
     if (!el || !('IntersectionObserver' in window)) return;
+    let tracked = false;
     const io = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) {
+      const on = entries.some((e) => e.isIntersecting);
+      setInSection(on);
+      if (on && !tracked) {
+        tracked = true;
         track('estimate_view');
-        io.disconnect();
       }
     });
     io.observe(el);
-    return () => io.disconnect();
+    // hide the phone total bar while the real totals card is on screen
+    const sum = summaryRef.current;
+    const io2 = sum ? new IntersectionObserver((e) => setSummaryVisible(e.some((x) => x.isIntersecting))) : null;
+    if (sum && io2) io2.observe(sum);
+    return () => {
+      io.disconnect();
+      io2?.disconnect();
+    };
   }, []);
 
   // Open a shared or saved estimate from the link (#estimate=CODE).
@@ -829,7 +842,7 @@ export function EstimateSection({
 
             <SimilarProjects items={portfolio} params={params} lang={lang} />
 
-            <div className="rounded-3xl bg-slate-900 dark:bg-[#0e172a] text-white border border-slate-800 dark:border-amber-500/25 p-5 sm:p-6">
+            <div ref={summaryRef} className="rounded-3xl bg-slate-900 dark:bg-[#0e172a] text-white border border-slate-800 dark:border-amber-500/25 p-5 sm:p-6">
               <div className="space-y-2 text-sm">
                 {estimate.stages.map((s) => {
                   const pct = estimate.totalKgs ? Math.round((s.totalKgs / estimate.totalKgs) * 100) : 0;
@@ -916,6 +929,22 @@ export function EstimateSection({
           </div>
         </div>
       </div>
+      {/* Phone: sticky total while scrolling through the stages */}
+      {inSection && !summaryVisible && estimate.lines.length > 0 && (
+        <div className="lg:hidden fixed inset-x-0 bottom-0 z-30 bg-slate-900/95 backdrop-blur border-t border-white/10 px-4 py-2.5 flex items-center justify-between gap-3 text-white" style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}>
+          <button
+            type="button"
+            onClick={() => summaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+            className="text-left cursor-pointer"
+          >
+            <div className="text-[11px] text-slate-400">{copy.total} · ~{estimate.days} {copy.daysUnit}</div>
+            <div className="text-lg font-extrabold text-amber-400 tabular-nums leading-tight">{formatKgs(estimate.totalKgs)}</div>
+          </button>
+          <button type="button" onClick={handleBook} className="mr-16 px-4 py-2.5 rounded-xl bg-amber-500 text-slate-950 text-sm font-semibold cursor-pointer">
+            {lang === 'en' ? 'Book' : lang === 'ky' ? 'Жазылуу' : 'Записаться'}
+          </button>
+        </div>
+      )}
     </section>
   );
 }
