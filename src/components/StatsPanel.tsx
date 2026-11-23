@@ -31,9 +31,29 @@ export function StatsPanel() {
     if (res.ok && Array.isArray(res.data.days)) setDays(res.data.days);
   };
 
+  const [backups, setBackups] = useState<string[]>([]);
+
   useEffect(() => {
     void load();
+    void apiFetch<{ days?: string[] }>('/api/backup?list=1', { auth: 'admin' }).then((r) => {
+      if (r.ok && Array.isArray(r.data.days)) setBackups(r.data.days);
+    });
   }, []);
+
+  // Download through fetch so the admin token header is sent, then save as a file.
+  const download = async (day?: string) => {
+    const res = await fetch('/api/backup' + (day ? `?day=${day}` : ''), {
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'ReadyHome' },
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `readyhome-backup-${day || new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  };
 
   const slice = days.slice(0, period);
   const total = (k: string) => slice.reduce((s, d) => s + (d.counts[k] || 0), 0);
@@ -116,6 +136,39 @@ export function StatsPanel() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-4 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">Резервные копии</div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Копия всех заявок, клиентов, отзывов и настроек делается автоматически каждую ночь и хранится 30 дней.
+              Файл содержит личные данные клиентов — храните его в надёжном месте.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void download()}
+            className="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-semibold cursor-pointer"
+          >
+            Скачать текущую копию
+          </button>
+        </div>
+        {backups.length > 0 && (
+          <div className="flex flex-wrap gap-2 text-xs">
+            {backups.slice(0, 30).map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => void download(d)}
+                className="px-2 py-1 rounded-lg border border-slate-300 dark:border-white/15 cursor-pointer tabular-nums"
+              >
+                {new Date(d).toLocaleDateString('ru-RU')}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

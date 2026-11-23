@@ -3,6 +3,7 @@
   "framework": "vite",
   "buildCommand": "vite build && tsx scripts/build-seo.ts",
   "outputDirectory": "dist",
+  "crons": [{ "path": "/api/cron/backup", "schedule": "0 21 * * *" }],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/((?!api/|assets/|src/).*)", "destination": "/index.html" }

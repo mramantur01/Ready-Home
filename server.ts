@@ -15,7 +15,18 @@ import {
   timingSafeStringCompare,
   verifyPassword,
 } from './server/auth.ts';
-import { getDb, getStats, incrStat, saveDb, STAT_EVENTS, type StatEvent } from './server/storage.ts';
+import {
+  exportBackup,
+  getDb,
+  getStats,
+  incrStat,
+  listBackups,
+  readBackup,
+  saveDb,
+  STAT_EVENTS,
+  storeDailyBackup,
+  type StatEvent,
+} from './server/storage.ts';
 import type {
   BookingRecord,
   BookingStatus,
@@ -853,6 +864,40 @@ export function createApp() {
   // ------------------------------------------------------------------
   // REVIEWS (/api/reviews)
   // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // BACKUPS: daily copy by Vercel Cron (kept 30 days) + admin download
+  // ------------------------------------------------------------------
+  app.get('/api/cron/backup', async (req, res) => {
+    const secret = (process.env.CRON_SECRET || '').trim();
+    if (!secret || req.headers.authorization !== `Bearer ${secret}`) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    res.json({ ok: true, key: await storeDailyBackup() });
+  });
+
+  app.get('/api/backup', async (req, res) => {
+    const admin = extractSession(req, ADMIN_COOKIE, 'admin');
+    if (!admin) {
+      res.status(401).json({ error: 'Доступ только для администратора.' });
+      return;
+    }
+    const day = clampStr(req.query.day, 10);
+    if (req.query.list === '1') {
+      res.json({ days: await listBackups() });
+      return;
+    }
+    const body = day ? await readBackup(day) : JSON.stringify(await exportBackup());
+    if (!body) {
+      res.status(404).json({ error: 'Копия не найдена.' });
+      return;
+    }
+    const name = `readyhome-backup-${day || new Date().toISOString().slice(0, 10)}.json`;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.send(body);
+  });
+
   // Anonymous funnel counters (see server/storage.ts).
   app.post('/api/track', async (req, res) => {
     const e = clampStr(req.body?.e, 30) as StatEvent;
