@@ -26,6 +26,7 @@ import {
 import { formatKgs, TIER_LABELS, tLoc } from '../i18n.ts';
 import { StageVisual } from './StageVisual.tsx';
 import { PaymentPlan } from './PaymentPlan.tsx';
+import { ShoppingList } from './ShoppingList.tsx';
 import { track } from '../analytics.ts';
 import { LayoutPicker } from './LayoutPicker.tsx';
 import { layoutTitle, TYPICAL_LAYOUTS } from '../data/layoutCatalog.ts';
@@ -708,6 +709,8 @@ export function EstimateSection({
                 })}
               </ol>
             </div>
+
+            <ShoppingList estimate={estimate} lang={lang} />
           </div>
 
           {/* Right: visual preview + totals */}

@@ -4,6 +4,7 @@ import type { ContactsConfig, WorkEstimate } from '../types.ts';
 import { WORK_STAGES, WORK_UNIT_LABELS } from './workCatalog.ts';
 import { FINISH_GROUPS, findFinish, type FinishGroup } from './finishCatalog.ts';
 import { TIER_LABELS } from '../i18n.ts';
+import { buyLabel, computeShoppingList } from './materialsCatalog.ts';
 
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -43,6 +44,10 @@ export function buildEstimateHtml(
       const op = findFinish(g.id, est.finishes?.[g.id], groups);
       return `<li><span class="sw" style="background:${esc(op.color)}"></span>${esc(g.label.ru)}: <b>${esc(op.name.ru)}</b></li>`;
     })
+    .join('');
+
+  const shopping = computeShoppingList(est)
+    .map((i) => `<tr><td>${esc(i.name)}</td><td class="n">${esc(buyLabel(i))}</td><td class="n muted">${i.byUnit ? "" : "≈ " + i.amount + " " + esc(i.unit)}</td></tr>`)
     .join('');
 
   return `<!doctype html><html lang="ru"><head><meta charset="utf-8">
@@ -101,6 +106,7 @@ export function buildEstimateHtml(
   <div class="muted"><span>Цена за м²</span><span>${kgs(est.totalKgs / p.areaSqm)}</span></div>
 </div>
 ${finishes ? `<h3 style="margin:16px 0 0;font-size:13px">Выбранная отделка</h3><ul class="fin">${finishes}</ul>` : ''}
+${shopping ? `<h3 style="margin:16px 0 4px;font-size:13px">Список закупки материалов (ориентировочно)</h3><table><tbody>${shopping}</tbody></table>` : ''}
 <p class="note muted">Предварительная смета по типовой планировке. Точная стоимость фиксируется в договоре после бесплатного замера инженером.
 Открыть и изменить эту смету онлайн: <a href="${esc(shareUrl)}">${esc(shareUrl)}</a></p>
 <div class="foot">${esc(contacts.address.ru)} · ${esc(contacts.phone)} · WhatsApp +${esc(contacts.whatsapp)} · Telegram @${esc(contacts.telegram)}</div>

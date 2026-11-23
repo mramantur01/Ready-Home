@@ -24,6 +24,7 @@ import { FinishCatalogEditor } from './FinishCatalogEditor.tsx';
 import { LayoutsEditor } from './LayoutsEditor.tsx';
 import { StatsPanel } from './StatsPanel.tsx';
 import { openContract } from '../data/contractPrint.ts';
+import { buyLabel, computeShoppingList } from '../data/materialsCatalog.ts';
 import { ASSET_IMAGES } from '../data/defaultContent.ts';
 
 interface AdminPanelModalProps {
@@ -580,6 +581,12 @@ export function AdminPanelModal({
                                     </li>
                                   ))}
                                 </ul>
+                                <div className="mt-1.5">
+                                  <span className="font-semibold">Закупка: </span>
+                                  {computeShoppingList(b.workEstimate)
+                                    .map((i) => `${i.name} — ${buyLabel(i)}`)
+                                    .join('; ')}
+                                </div>
                                 {b.workEstimate.finishes && Object.keys(b.workEstimate.finishes).length > 0 && (
                                   <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
                                     {content.finishCatalog.filter((g) => b.workEstimate?.finishes?.[g.id]).map((g) => {
