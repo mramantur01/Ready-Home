@@ -1,0 +1,15 @@
+{
+  "name": "READY HOME — ремонт и смета",
+  "short_name": "READY HOME",
+  "description": "Смета ремонта по каждой работе, 3D-визуализация и ход ремонта в личном кабинете.",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#131d33",
+  "theme_color": "#131d33",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

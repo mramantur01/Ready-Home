@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, Bookmark, Check, ChevronDown, ClipboardList, FileDown, Pause, Play, RotateCcw, Share2 } from 'lucide-react';
 import type {
   ApartmentLayout,
@@ -29,6 +29,9 @@ import { StageVisual } from './StageVisual.tsx';
 import { PaymentPlan } from './PaymentPlan.tsx';
 import { ShoppingList } from './ShoppingList.tsx';
 import { PhotoDesign } from './PhotoDesign.tsx';
+
+// three.js is loaded only when the visitor opens the 3D apartment view.
+const Apartment3D = lazy(() => import('./Apartment3D.tsx'));
 import { SimilarProjects } from './SimilarProjects.tsx';
 import { track } from '../analytics.ts';
 import { LayoutPicker } from './LayoutPicker.tsx';
@@ -241,6 +244,7 @@ export function EstimateSection({
   }, []);
 
   const [layoutId, setLayoutId] = useState<string | null>(null);
+  const [view, setView] = useState<'room' | 'apartment'>('room');
   const allLayouts = useMemo(() => [...layouts, ...TYPICAL_LAYOUTS], [layouts]);
 
   // Manual changes to the apartment mean it no longer matches the picked layout exactly.
@@ -732,12 +736,47 @@ export function EstimateSection({
           {/* Right: visual preview + totals */}
           <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
             <div className="rounded-3xl bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 p-4 sm:p-5">
-              <StageVisual
-                doneStages={doneStages}
-                wallpaper={selectedIds.has('w-wall-wallpaper')}
-                finishes={finishes}
-                groups={finishCatalog}
-              />
+              <div className="flex gap-1 bg-slate-100 dark:bg-white/5 rounded-xl p-1 mb-3 text-xs font-semibold" role="tablist">
+                {([
+                  ['room', lang === 'en' ? 'Room' : lang === 'ky' ? 'Бөлмө' : 'Комната'],
+                  ['apartment', lang === 'en' ? 'Apartment 3D' : lang === 'ky' ? 'Батир 3D' : 'Квартира 3D'],
+                ] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={view === id}
+                    onClick={() => setView(id)}
+                    className={`flex-1 py-1.5 rounded-lg cursor-pointer ${
+                      view === id ? 'bg-amber-500 text-slate-950' : 'text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {view === 'room' ? (
+                <StageVisual
+                  doneStages={doneStages}
+                  wallpaper={selectedIds.has('w-wall-wallpaper')}
+                  finishes={finishes}
+                  groups={finishCatalog}
+                />
+              ) : (
+                <Suspense fallback={<div className="h-72 sm:h-80 rounded-2xl bg-slate-100 dark:bg-white/5 animate-pulse" />}>
+                  <Apartment3D
+                    params={params}
+                    spaces={allLayouts.find((l) => l.id === layoutId)?.spaces}
+                    doneStages={doneStages}
+                    finishes={finishes}
+                    groups={finishCatalog}
+                    wallpaper={selectedIds.has('w-wall-wallpaper')}
+                  />
+                  <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    {lang === 'en' ? 'Drag to rotate, pinch or scroll to zoom.' : lang === 'ky' ? 'Айлантуу үчүн сүйрөңүз, чоңойтуу үчүн тартыңыз.' : 'Вращайте пальцем или мышью, приближайте щипком или колёсиком.'}
+                  </p>
+                </Suspense>
+              )}
               <div className="mt-4">
                 <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                   <span>{copy.preview}:</span>
