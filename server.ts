@@ -2,7 +2,6 @@ import 'dotenv/config';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import {
   authDelay,
   clampStr,
@@ -74,7 +73,9 @@ function generateBookingCode(existingIds: Set<string>): string {
   return `RH-${Date.now().toString().slice(-6)}`;
 }
 
-async function startServer() {
+// Builds the Express app with all /api routes. Used by the local/AI Studio
+// server below and by the Vercel serverless function in api/index.ts.
+export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '1mb' }));
@@ -704,10 +705,17 @@ async function startServer() {
     res.json(result);
   });
 
+  return app;
+}
+
+async function startServer() {
+  const app = createApp();
+
   // ------------------------------------------------------------------
   // VITE MIDDLEWARE (DEV) OR STATIC DIST (PROD)
   // ------------------------------------------------------------------
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -727,7 +735,10 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start READY HOME server:', err);
-  process.exit(1);
-});
+// On Vercel the app runs as a serverless function (api/index.ts), not a long-lived server.
+if (!process.env.VERCEL) {
+  startServer().catch((err) => {
+    console.error('Failed to start READY HOME server:', err);
+    process.exit(1);
+  });
+}
