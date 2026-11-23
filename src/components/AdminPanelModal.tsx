@@ -534,7 +534,21 @@ export function AdminPanelModal({
                               {b.clientName} · <span className="tabular-nums">{b.phone}</span>
                             </div>
                             <div className="text-xs text-slate-600 dark:text-slate-300">
-                              {b.complexOrDistrict} ({b.areaSqm} м²) · {b.serviceName} · Замер: {b.date} {b.time}
+                              {b.source === 'quick' ? (
+                                <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400 mr-1">
+                                  Перезвонить ({b.contactMethod === 'whatsapp' ? 'WhatsApp' : b.contactMethod === 'telegram' ? 'Telegram' : 'звонок'})
+                                  {b.contactMethod === 'whatsapp' && (
+                                    <a href={`https://wa.me/${b.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="underline">
+                                      открыть
+                                    </a>
+                                  )}
+                                  ·
+                                </span>
+                              ) : null}
+                              {b.complexOrDistrict}
+                              {b.areaSqm ? ` (${b.areaSqm} м²)` : ''} · {b.serviceName}
+                              {b.date ? ` · Замер: ${b.date} ${b.time}` : ''}
+                              {b.comment ? ` · «${b.comment}»` : ''}
                             </div>
                             {b.visual3D && (
                               <div className="text-xs text-amber-600 dark:text-amber-400">

@@ -40,6 +40,7 @@ import { SmartImage } from './components/SmartImage.tsx';
 import { LazyStudio3D } from './components/LazyStudio3D.tsx';
 import { CalculatorSection } from './components/CalculatorSection.tsx';
 import { EstimateSection } from './components/EstimateSection.tsx';
+import { QuickLeadModal } from './components/QuickLeadModal.tsx';
 import { track } from './analytics.ts';
 import { BeforeAfterSlider } from './components/BeforeAfterSlider.tsx';
 import { BookingModal } from './components/BookingModal.tsx';
@@ -191,15 +192,23 @@ export default function App() {
     el.textContent = JSON.stringify(data);
   }, [content.contacts]);
 
+  const [quickLeadOpen, setQuickLeadOpen] = useState(false);
+
   const requestBooking = (draft: BookingDraft = {}) => {
     setBookingDraft(draft);
     if (!profile) {
-      setAuthPromptNotice(copy.authNotice);
-      setPendingBookingAfterLogin(true);
-      setCabinetOpen(true);
+      setQuickLeadOpen(true);
       return;
     }
     setBookingOpen(true);
+  };
+
+  // From the quick form: sign in / register, then continue to the full booking wizard.
+  const requestFullBooking = () => {
+    setQuickLeadOpen(false);
+    setAuthPromptNotice(copy.authNotice);
+    setPendingBookingAfterLogin(true);
+    setCabinetOpen(true);
   };
 
   const handleClientAuthChange = (nextProfile: ClientProfile | null, nextBookings: BookingRecord[]) => {
@@ -1298,6 +1307,14 @@ export default function App() {
       <FloatingWhatsApp contacts={content.contacts} onOpenBooking={() => requestBooking({})} />
 
       {/* MODALS */}
+      <QuickLeadModal
+        open={quickLeadOpen}
+        draft={bookingDraft}
+        lang={lang}
+        contacts={content.contacts}
+        onClose={() => setQuickLeadOpen(false)}
+        onFullBooking={requestFullBooking}
+      />
       {profile && bookingOpen && (
         <BookingModal
           open={bookingOpen}

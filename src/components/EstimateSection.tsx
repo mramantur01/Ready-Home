@@ -433,6 +433,7 @@ export function EstimateSection({
       areaSqm: params.areaSqm,
       materialTier: params.tier,
       roomsCount: `${params.rooms}-комн`,
+      shareCode: currentCode(),
       workEstimate: {
         params,
         selections,

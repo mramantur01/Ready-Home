@@ -179,6 +179,29 @@ function sanitizeFinishCatalog(input: unknown[], current: FinishGroupConfig[]): 
   });
 }
 
+// Itemized estimate: recompute from the studio's own price list so the client
+// cannot send arbitrary totals.
+function recomputeEstimate(content: SiteContent, rawWork: unknown): WorkEstimate | undefined {
+  if (!rawWork || typeof rawWork !== 'object') return undefined;
+  const raw = rawWork as { params?: unknown; selections?: unknown; finishes?: unknown };
+  if (!Array.isArray(raw.selections)) return undefined;
+  const params = clampParams((raw.params || {}) as Record<string, never>);
+  const selections: WorkSelection[] = (raw.selections as unknown[])
+    .slice(0, 120)
+    .filter((s): s is { id: unknown; qty: unknown } => Boolean(s) && typeof s === 'object')
+    .map((s) => ({ id: clampStr(s.id, 40), qty: Number(s.qty) || 0 }))
+    .filter((s) => s.id);
+  const catalog = content.finishCatalog;
+  const finishes = sanitizeFinishes(raw.finishes, catalog);
+  const selectedIds = new Set(selections.map((x) => x.id));
+  // Keep colour choices only for jobs that are actually in the estimate.
+  for (const g of catalog) {
+    if (!g.workItemIds.some((id) => selectedIds.has(id))) delete finishes[g.id];
+  }
+  const computed = computeWorkEstimate(content.priceList, params, selections, finishes, catalog);
+  return computed.lines.length > 0 ? computed : undefined;
+}
+
 function generateBookingCode(existingIds: Set<string>): string {
   for (let i = 0; i < 20; i++) {
     const num = crypto.randomInt(100000, 999999);
@@ -664,6 +687,76 @@ export function createApp() {
     res.json({ bookings: sorted });
   });
 
+  // ------------------------------------------------------------------
+  // QUICK LEAD (/api/leads): name + phone, no account needed
+  // ------------------------------------------------------------------
+  app.post('/api/leads', async (req, res) => {
+    // Honeypot: real visitors never fill the hidden "website" field.
+    if (clampStr(req.body?.website, 100)) {
+      res.status(201).json({ ok: true });
+      return;
+    }
+    const name = clampStr(req.body?.name, 80);
+    const phone = normalizePhone(req.body?.phone);
+    if (name.length < 2 || !phone) {
+      res.status(400).json({ error: 'Укажите имя и номер телефона (например, +996 555 123 456).' });
+      return;
+    }
+    const contactMethod = (['call', 'whatsapp', 'telegram'] as const).find((m) => m === req.body?.contactMethod) || 'call';
+    const db = await getDb();
+    const today = new Date().toISOString().slice(0, 10);
+    const sameDay = db.bookings.filter((b) => b.phone === phone && b.createdAt.startsWith(today)).length;
+    if (sameDay >= 5) {
+      res.status(429).json({ error: 'Заявка с этого номера уже получена. Мы скоро свяжемся с вами.' });
+      return;
+    }
+    const workEstimate = recomputeEstimate(db.content, req.body?.workEstimate);
+    const params = workEstimate?.params;
+    const id = generateBookingCode(new Set(db.bookings.map((b) => b.id)));
+    const record: BookingRecord = {
+      id,
+      phone,
+      clientName: name,
+      propertyType: params?.propertyType || 'newbuild',
+      complexOrDistrict: clampStr(req.body?.complexOrDistrict, 120) || 'Бишкек',
+      addressDetails: '',
+      areaSqm: params?.areaSqm || 0,
+      roomsCount: params ? `${params.rooms}-комн` : '',
+      serviceId: '',
+      serviceName: workEstimate ? 'Смета по работам — перезвонить' : 'Быстрая заявка — перезвонить',
+      warrantyYears: 3,
+      materialTier: params?.tier || 'comfort',
+      masterId: '',
+      masterName: 'Назначит студия',
+      date: '',
+      time: '',
+      paymentMethod: '',
+      needLayoutApproval: false,
+      comment: clampStr(req.body?.comment, 500),
+      totalPriceKgs: workEstimate?.totalKgs || 0,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      workEstimate,
+      source: 'quick',
+      contactMethod,
+    };
+    db.bookings.unshift(record);
+    await saveDb(db);
+    const how = { call: 'позвонить', whatsapp: 'написать в WhatsApp', telegram: 'написать в Telegram' }[contactMethod];
+    void sendTelegramNotification(
+      [
+        `📞 Быстрая заявка ${id}: ${name} (${phone}) — просит ${how}`,
+        record.comment ? `Комментарий: ${record.comment}` : '',
+        workEstimate ? formatWorkEstimateText(workEstimate, db.content.finishCatalog) : '',
+        workEstimate ? `Сумма: ${workEstimate.totalKgs.toLocaleString('ru-RU')} KGS` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+    void incrStat('booking_created');
+    res.status(201).json({ ok: true, id });
+  });
+
   app.post('/api/bookings', async (req, res) => {
     const clientSession = extractSession(req, CLIENT_COOKIE, 'client');
     const adminSession = extractSession(req, ADMIN_COOKIE, 'admin');
@@ -742,27 +835,7 @@ export function createApp() {
       }
     }
 
-    // Itemized estimate: recompute from the studio's own price list so the client
-    // cannot send arbitrary totals.
-    let workEstimate: WorkEstimate | undefined;
-    const rawWork = req.body?.workEstimate as { params?: unknown; selections?: unknown } | undefined;
-    if (rawWork && typeof rawWork === 'object' && Array.isArray(rawWork.selections)) {
-      const params = clampParams((rawWork.params || {}) as Record<string, never>);
-      const selections: WorkSelection[] = (rawWork.selections as unknown[])
-        .slice(0, 120)
-        .filter((s): s is { id: unknown; qty: unknown } => Boolean(s) && typeof s === 'object')
-        .map((s) => ({ id: clampStr(s.id, 40), qty: Number(s.qty) || 0 }))
-        .filter((s) => s.id);
-      const catalog = db.content.finishCatalog;
-      const finishes = sanitizeFinishes((rawWork as { finishes?: unknown }).finishes, catalog);
-      const selectedIds = new Set(selections.map((x) => x.id));
-      // Keep colour choices only for jobs that are actually in the estimate.
-      for (const g of catalog) {
-        if (!g.workItemIds.some((id) => selectedIds.has(id))) delete finishes[g.id];
-      }
-      const computed = computeWorkEstimate(db.content.priceList, params, selections, finishes, catalog);
-      if (computed.lines.length > 0) workEstimate = computed;
-    }
+    const workEstimate = recomputeEstimate(db.content, req.body?.workEstimate);
 
     const existingIds = new Set(db.bookings.map((b) => b.id));
     const id = generateBookingCode(existingIds);

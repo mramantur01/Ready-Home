@@ -331,6 +331,8 @@ export interface BookingRecord {
   visual3D?: Visual3DConfig;
   workEstimate?: WorkEstimate;
   adminNote?: string; // only in admin API responses
+  source?: 'quick'; // "перезвоните мне" request without an account or a chosen date
+  contactMethod?: 'call' | 'whatsapp' | 'telegram';
 }
 
 export interface ClientProfile {
@@ -378,4 +380,5 @@ export interface BookingDraft {
     finishes: FinishChoices;
     preview: WorkEstimate; // client-side numbers for display; the server recomputes
   };
+  shareCode?: string; // #estimate=CODE link to the same estimate
 }
