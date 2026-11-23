@@ -26,6 +26,7 @@ import {
 import { formatKgs, TIER_LABELS, tLoc } from '../i18n.ts';
 import { StageVisual } from './StageVisual.tsx';
 import { PaymentPlan } from './PaymentPlan.tsx';
+import { track } from '../analytics.ts';
 import { LayoutPicker } from './LayoutPicker.tsx';
 import { layoutTitle, TYPICAL_LAYOUTS } from '../data/layoutCatalog.ts';
 import { decodeEstimate, encodeEstimate, estimateShareUrl } from '../data/estimateShare.ts';
@@ -198,6 +199,20 @@ export function EstimateSection({
   const [playing, setPlaying] = useState(false);
   const timer = useRef<number | null>(null);
   const [flash, setFlash] = useState('');
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || !('IntersectionObserver' in window)) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        track('estimate_view');
+        io.disconnect();
+      }
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   // Open a shared or saved estimate from the link (#estimate=CODE).
   useEffect(() => {
@@ -224,12 +239,14 @@ export function EstimateSection({
 
   // Manual changes to the apartment mean it no longer matches the picked layout exactly.
   const update = (patch: Partial<ApartmentParams>) => {
+    track('estimate_edit');
     const shape = 'areaSqm' in patch || 'rooms' in patch || 'ceilingHeight' in patch || 'bathrooms' in patch;
     if (shape) setLayoutId(null);
     setParams((p) => clampParams({ ...p, ...patch, layout: shape ? undefined : p.layout }));
   };
 
   const pickLayout = (l: ApartmentLayout) => {
+    track('layout_pick');
     setLayoutId(l.id);
     setQtyOverride({});
     setParams((p) =>
@@ -355,7 +372,10 @@ export function EstimateSection({
     return out;
   }, [selections, finishes, FINISH_GROUP_BY_ITEM]);
 
-  const setFinish = (group: FinishGroupId, optionId: string) => setFinishes((f) => ({ ...f, [group]: optionId }));
+  const setFinish = (group: FinishGroupId, optionId: string) => {
+    track('finish_pick');
+    setFinishes((f) => ({ ...f, [group]: optionId }));
+  };
 
   const showFlash = (msg: string) => {
     setFlash(msg);
@@ -366,6 +386,7 @@ export function EstimateSection({
     encodeEstimate({ params, enabled: enabledOverride, qty: qtyOverride, finishes: chosenFinishes });
 
   const handlePdf = () => {
+    track('pdf');
     const ok = openPrintableEstimate(
       { ...estimate, finishes: chosenFinishes },
       contacts,
@@ -376,6 +397,7 @@ export function EstimateSection({
   };
 
   const handleShare = async () => {
+    track('share');
     const url = estimateShareUrl(currentCode());
     const text = `${copy.shareText}: ${params.rooms}-комн, ${params.areaSqm} м² — ${formatKgs(estimate.totalKgs)}`;
     if (navigator.share) {
@@ -395,6 +417,7 @@ export function EstimateSection({
   };
 
   const handleSave = async () => {
+    track('save');
     const ok = await onSaveEstimate({
       code: currentCode(),
       label: `${params.rooms}-комн · ${params.areaSqm} м² · ${TIER_LABELS[params.tier].ru}`,
@@ -404,6 +427,7 @@ export function EstimateSection({
   };
 
   const handleBook = () => {
+    track('book_click');
     onBook({
       propertyType: params.propertyType,
       areaSqm: params.areaSqm,
@@ -433,7 +457,7 @@ export function EstimateSection({
       : tLoc(WORK_STAGES.find((s) => s.id === activeStages[shownCount - 1]?.id)?.name, lang);
 
   return (
-    <section id="estimate" className="py-16 md:py-24 scroll-mt-20 border-t border-slate-200/80 dark:border-white/5">
+    <section ref={sectionRef} id="estimate" className="py-16 md:py-24 scroll-mt-20 border-t border-slate-200/80 dark:border-white/5">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mb-10">
           <p className="text-sm font-medium text-amber-600 dark:text-amber-400 mb-2">{copy.kicker}</p>

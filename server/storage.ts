@@ -131,3 +131,73 @@ function normalizeState(raw: Partial<DatabaseState>): DatabaseState {
     claimedAdminHash: typeof raw.claimedAdminHash === 'string' ? raw.claimedAdminHash : undefined,
   };
 }
+
+// ------------------------------------------------------------------
+// Anonymous funnel counters (no personal data): one Redis hash per day,
+// incremented atomically so they never race with the main state blob.
+// ------------------------------------------------------------------
+export const STAT_EVENTS = [
+  'visit',
+  'estimate_view',
+  'estimate_edit',
+  'layout_pick',
+  'finish_pick',
+  'pdf',
+  'share',
+  'save',
+  'book_click',
+  'booking_created',
+  'review_sent',
+] as const;
+export type StatEvent = (typeof STAT_EVENTS)[number];
+
+const STATS_PREFIX = process.env.VERCEL_ENV === 'preview' ? 'readyhome:preview:stats:' : 'readyhome:stats:';
+const memStats: Record<string, Record<string, number>> = {};
+
+function dayKey(offsetDays = 0): string {
+  return new Date(Date.now() - offsetDays * 86_400_000).toISOString().slice(0, 10);
+}
+
+export async function incrStat(event: StatEvent): Promise<void> {
+  const day = dayKey();
+  const cfg = getUpstashConfig();
+  if (!cfg) {
+    memStats[day] = memStats[day] || {};
+    memStats[day][event] = (memStats[day][event] || 0) + 1;
+    return;
+  }
+  try {
+    await fetch(`${cfg.url}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([
+        ['HINCRBY', STATS_PREFIX + day, event, '1'],
+        ['EXPIRE', STATS_PREFIX + day, String(400 * 86_400)],
+      ]),
+    });
+  } catch {
+    // counters are best effort
+  }
+}
+
+export async function getStats(days: number): Promise<Array<{ day: string; counts: Record<string, number> }>> {
+  const list = Array.from({ length: days }, (_, i) => dayKey(i));
+  const cfg = getUpstashConfig();
+  if (!cfg) return list.map((day) => ({ day, counts: { ...(memStats[day] || {}) } }));
+  try {
+    const res = await fetch(`${cfg.url}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(list.map((day) => ['HGETALL', STATS_PREFIX + day])),
+    });
+    const data = (await res.json()) as Array<{ result?: unknown }>;
+    return list.map((day, i) => {
+      const flat = Array.isArray(data[i]?.result) ? (data[i].result as string[]) : [];
+      const counts: Record<string, number> = {};
+      for (let k = 0; k + 1 < flat.length; k += 2) counts[flat[k]] = Number(flat[k + 1]) || 0;
+      return { day, counts };
+    });
+  } catch {
+    return list.map((day) => ({ day, counts: {} }));
+  }
+}

@@ -15,7 +15,7 @@ import {
   timingSafeStringCompare,
   verifyPassword,
 } from './server/auth.ts';
-import { getDb, saveDb } from './server/storage.ts';
+import { getDb, getStats, incrStat, saveDb, STAT_EVENTS, type StatEvent } from './server/storage.ts';
 import type {
   BookingRecord,
   BookingStatus,
@@ -804,6 +804,7 @@ export function createApp() {
       .join('\n');
 
     void sendTelegramNotification(tgMessage);
+    void incrStat('booking_created');
 
     res.status(201).json({ ok: true, booking: record });
   });
@@ -834,6 +835,24 @@ export function createApp() {
   // ------------------------------------------------------------------
   // REVIEWS (/api/reviews)
   // ------------------------------------------------------------------
+  // Anonymous funnel counters (see server/storage.ts).
+  app.post('/api/track', async (req, res) => {
+    const e = clampStr(req.body?.e, 30) as StatEvent;
+    // booking_created / review_sent are counted by the server itself.
+    if (STAT_EVENTS.includes(e) && e !== 'booking_created' && e !== 'review_sent') await incrStat(e);
+    res.status(204).end();
+  });
+
+  app.get('/api/stats', async (req, res) => {
+    const admin = extractSession(req, ADMIN_COOKIE, 'admin');
+    if (!admin) {
+      res.status(401).json({ error: 'Доступ только для администратора.' });
+      return;
+    }
+    const days = Math.max(1, Math.min(90, Math.round(Number(req.query.days) || 30)));
+    res.json({ days: await getStats(days) });
+  });
+
   app.get('/api/reviews', async (req, res) => {
     const db = await getDb();
     const admin = extractSession(req, ADMIN_COOKIE, 'admin');
@@ -871,6 +890,7 @@ export function createApp() {
     void sendTelegramNotification(
       `💬 Новый отзыв на модерации от ${author} (${rating}★): ${text.slice(0, 200)}\nОдобрите его в админке → Отзывы.`,
     );
+    void incrStat('review_sent');
     res.status(201).json({ ok: true, pending: true });
   });
 

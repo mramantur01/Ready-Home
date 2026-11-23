@@ -40,6 +40,7 @@ import { SmartImage } from './components/SmartImage.tsx';
 import { LazyStudio3D } from './components/LazyStudio3D.tsx';
 import { CalculatorSection } from './components/CalculatorSection.tsx';
 import { EstimateSection } from './components/EstimateSection.tsx';
+import { track } from './analytics.ts';
 import { BeforeAfterSlider } from './components/BeforeAfterSlider.tsx';
 import { BookingModal } from './components/BookingModal.tsx';
 import { ClientCabinetModal } from './components/ClientCabinetModal.tsx';
@@ -163,6 +164,33 @@ export default function App() {
   const currentSlide = content.heroSlides[slideIdx % content.heroSlides.length] || content.heroSlides[0];
 
   // Unified Booking Entry: enforces login first, then immediately launches booking wizard
+  useEffect(() => {
+    track('visit');
+  }, []);
+
+  // Business details for search engines (Google, Yandex, 2GIS), built from the editable contacts.
+  useEffect(() => {
+    const c = content.contacts;
+    const data = {
+      '@context': 'https://schema.org',
+      '@type': 'HomeAndConstructionBusiness',
+      name: 'READY HOME',
+      url: window.location.origin,
+      telephone: c.phone,
+      address: { '@type': 'PostalAddress', streetAddress: c.address.ru, addressLocality: 'Бишкек', addressCountry: 'KG' },
+      areaServed: 'Бишкек',
+      sameAs: [c.instagram ? `https://instagram.com/${c.instagram}` : '', c.telegram ? `https://t.me/${c.telegram}` : ''].filter(Boolean),
+    };
+    let el = document.getElementById('ld-business') as HTMLScriptElement | null;
+    if (!el) {
+      el = document.createElement('script');
+      el.type = 'application/ld+json';
+      el.id = 'ld-business';
+      document.head.appendChild(el);
+    }
+    el.textContent = JSON.stringify(data);
+  }, [content.contacts]);
+
   const requestBooking = (draft: BookingDraft = {}) => {
     setBookingDraft(draft);
     if (!profile) {
@@ -1249,6 +1277,8 @@ export default function App() {
             <a href="#studio3d" className="hover:text-amber-500">3D-Ремонт</a>
             <a href="#services" className="hover:text-amber-500">Услуги</a>
             <a href="#calculator" className="hover:text-amber-500">Калькулятор</a>
+            <a href="/remont/" className="hover:text-amber-500">Ремонт по планировкам</a>
+            <a href="/ceny-na-remont" className="hover:text-amber-500">Цены на работы</a>
             <a href="#portfolio" className="hover:text-amber-500">До / После</a>
             <a href="#contacts" className="hover:text-amber-500">Контакты</a>
             <button

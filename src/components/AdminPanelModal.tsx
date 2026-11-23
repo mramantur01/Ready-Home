@@ -22,6 +22,7 @@ import { PriceListEditor } from './PriceListEditor.tsx';
 import { findFinish } from '../data/finishCatalog.ts';
 import { FinishCatalogEditor } from './FinishCatalogEditor.tsx';
 import { LayoutsEditor } from './LayoutsEditor.tsx';
+import { StatsPanel } from './StatsPanel.tsx';
 import { ASSET_IMAGES } from '../data/defaultContent.ts';
 
 interface AdminPanelModalProps {
@@ -42,6 +43,7 @@ type AdminTab =
   | 'pricelist'
   | 'finishes'
   | 'layouts'
+  | 'stats'
   | 'portfolio'
   | 'reviews'
   | 'contacts'
@@ -408,6 +410,7 @@ export function AdminPanelModal({
               {(
                 [
                   ['crm', 'Заказы (CRM)'],
+                  ['stats', 'Аналитика'],
                   ['site', 'Баннер и строка'],
                   ['services', 'Цены и услуги'],
                   ['pricelist', 'Прайс-лист работ'],
@@ -792,6 +795,8 @@ export function AdminPanelModal({
                   ))}
                 </div>
               )}
+
+              {activeTab === 'stats' && <StatsPanel />}
 
               {activeTab === 'layouts' && (
                 <LayoutsEditor layouts={draft.layouts} onChange={(layouts) => setDraft({ ...draft, layouts })} />
