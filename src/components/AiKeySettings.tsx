@@ -24,12 +24,18 @@ export function AiKeySettings() {
     setBusy(true);
     setMsg('');
     setError('');
-    const res = await apiFetch<{ ok?: boolean; configured?: boolean; error?: string }>('/api/admin/ai-key', {
-      method: 'POST',
-      auth: 'admin',
-      body: JSON.stringify({ key: value }),
-    });
-    setBusy(false);
+    let res: { ok: boolean; status: number; data: { ok?: boolean; configured?: boolean; error?: string } };
+    try {
+      res = await apiFetch<{ ok?: boolean; configured?: boolean; error?: string }>('/api/admin/ai-key', {
+        method: 'POST',
+        auth: 'admin',
+        body: JSON.stringify({ key: value }),
+      });
+    } catch {
+      res = { ok: false, status: 0, data: { error: 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.' } };
+    } finally {
+      setBusy(false);
+    }
     setKey('');
     if (!res.ok) {
       setError(res.data.error || 'Не удалось сохранить ключ.');

@@ -35,14 +35,18 @@ async function client(): Promise<GoogleGenAI> {
 // Tiny request to check that a key works before saving it.
 export async function testKey(key: string): Promise<string | null> {
   try {
-    const res = await new GoogleGenAI({ apiKey: key }).models.generateContent({
+    const call = new GoogleGenAI({ apiKey: key }).models.generateContent({
       model: MODEL,
       contents: [{ role: 'user', parts: [{ text: 'Ответь одним словом: ок' }] }],
       config: { maxOutputTokens: 20 },
     });
+    // Never leave the admin waiting forever: give up after 20 s with a clear message.
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 20_000));
+    const res = await Promise.race([call, timeout]);
     return res.text !== undefined ? null : 'Пустой ответ от Gemini';
   } catch (err) {
     const text = err instanceof Error ? err.message : String(err);
+    if (text === 'TIMEOUT') return 'Google не ответил за 20 секунд. Проверьте, что это ключ Gemini API (обычно начинается с AIza…), и попробуйте ещё раз.';
     if (/API key not valid|API_KEY_INVALID/i.test(text)) return 'ключ недействителен — скопируйте его заново целиком.';
     if (/PERMISSION_DENIED|SERVICE_DISABLED/i.test(text)) return 'для ключа не включён Gemini API в Google Cloud.';
     if (/not found|NOT_FOUND/i.test(text)) return `модель ${MODEL} недоступна для этого ключа.`;
