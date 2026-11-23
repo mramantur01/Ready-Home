@@ -195,8 +195,26 @@ export interface WorkEstimateLine {
   materialsKgs: number;
 }
 
+// Colour / finish choices the client makes for jobs (paint colour, tile, laminate…).
+export type FinishGroupId =
+  | 'wall_paint'
+  | 'wallpaper'
+  | 'bath_tile'
+  | 'bath_floor_tile'
+  | 'apron'
+  | 'laminate'
+  | 'plinth'
+  | 'ceiling'
+  | 'doors'
+  | 'entrance_door'
+  | 'sockets'
+  | 'plumbing';
+
+export type FinishChoices = Partial<Record<FinishGroupId, string>>;
+
 export interface WorkEstimate {
   params: ApartmentParams;
+  finishes?: FinishChoices;
   lines: WorkEstimateLine[];
   stages: Array<{ id: WorkStageId; totalKgs: number; days: number }>;
   workKgs: number;
@@ -298,6 +316,7 @@ export interface BookingDraft {
   workEstimate?: {
     params: ApartmentParams;
     selections: WorkSelection[];
+    finishes: FinishChoices;
     preview: WorkEstimate; // client-side numbers for display; the server recomputes
   };
 }

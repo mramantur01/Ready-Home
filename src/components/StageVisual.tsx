@@ -1,40 +1,36 @@
-import type { MaterialTier, WorkStageId } from '../types.ts';
+import type { FinishChoices, WorkStageId } from '../types.ts';
+import { findFinish } from '../data/finishCatalog.ts';
 
 // Front view of one apartment room that "builds up" stage by stage:
 // bare concrete → wiring → plaster → screed → tiles → paint → ceiling → floor → doors → fixtures → clean.
+// Colours come from the client's finish choices (paint, tile, laminate, doors…).
 interface StageVisualProps {
   doneStages: Set<WorkStageId>;
   wallpaper: boolean; // wallpaper instead of paint
-  gklCeiling: boolean; // drywall ceiling instead of stretch
-  tier: MaterialTier;
+  finishes: FinishChoices;
 }
 
-const WALL_PAINT: Record<MaterialTier, string> = {
-  standard: '#e9e2d4',
-  comfort: '#d9cbb3',
-  premium: '#b9c4b4',
-};
-
-const LAMINATE: Record<MaterialTier, [string, string]> = {
-  standard: ['#b98e5f', '#a87d50'],
-  comfort: ['#9c6b3f', '#8a5d34'],
-  premium: ['#6e4a2e', '#5e3e26'],
-};
-
-export function StageVisual({ doneStages, wallpaper, gklCeiling, tier }: StageVisualProps) {
+export function StageVisual({ doneStages, wallpaper, finishes }: StageVisualProps) {
   const has = (s: WorkStageId) => doneStages.has(s);
   const plastered = has('walls_rough');
   const finished = has('walls_finish');
-  const wallFill = finished
-    ? wallpaper
-      ? 'url(#rh-wallpaper)'
-      : WALL_PAINT[tier]
-    : plastered
-      ? '#c9c6c0'
-      : 'url(#rh-concrete)';
+
+  const paint = findFinish('wall_paint', finishes.wall_paint);
+  const paper = findFinish('wallpaper', finishes.wallpaper);
+  const tile = findFinish('bath_tile', finishes.bath_tile);
+  const lam = findFinish('laminate', finishes.laminate);
+  const ceil = findFinish('ceiling', finishes.ceiling);
+  const door = findFinish('doors', finishes.doors);
+  const plinthOpt = findFinish('plinth', finishes.plinth);
+  const socket = findFinish('sockets', finishes.sockets);
+
+  const wallColor = wallpaper ? paper.color : paint.color;
+  const plinthColor =
+    plinthOpt.id === 'match_floor' ? lam.accent || lam.color : plinthOpt.id === 'match_wall' ? wallColor : plinthOpt.color;
+
+  const wallFill = finished ? (wallpaper ? 'url(#rh-wallpaper)' : paint.color) : plastered ? '#c9c6c0' : 'url(#rh-concrete)';
   const floorFill = has('floor_finish') ? 'url(#rh-laminate)' : has('floor_rough') ? '#a9a49b' : 'url(#rh-concrete-dark)';
-  const ceilingFill = has('ceiling') ? (gklCeiling ? '#f4f1ea' : '#fbfaf7') : plastered ? '#c4c1bb' : 'url(#rh-concrete)';
-  const [lamA, lamB] = LAMINATE[tier];
+  const ceilingFill = has('ceiling') ? ceil.color : plastered ? '#c4c1bb' : 'url(#rh-concrete)';
 
   return (
     <svg viewBox="0 0 400 260" className="w-full h-auto rounded-2xl" role="img" aria-label="Визуализация этапов ремонта">
@@ -51,16 +47,17 @@ export function StageVisual({ doneStages, wallpaper, gklCeiling, tier }: StageVi
           <circle cx="12" cy="11" r="1.2" fill="#7c7973" />
         </pattern>
         <pattern id="rh-tiles" width="16" height="16" patternUnits="userSpaceOnUse">
-          <rect width="16" height="16" fill={tier === 'premium' ? '#e7e3dc' : tier === 'comfort' ? '#dfe6ea' : '#eef0f1'} />
-          <path d="M16 0H0V16" fill="none" stroke="#b9c0c4" strokeWidth="1" />
+          <rect width="16" height="16" fill={tile.color} />
+          <path d="M2 12 Q8 6 14 9" stroke={tile.accent || tile.color} strokeWidth="0.8" fill="none" opacity="0.6" />
+          <path d="M16 0H0V16" fill="none" stroke={tile.accent || '#b9c0c4'} strokeWidth="1" />
         </pattern>
         <pattern id="rh-wallpaper" width="22" height="22" patternUnits="userSpaceOnUse">
-          <rect width="22" height="22" fill={WALL_PAINT[tier]} />
-          <path d="M11 3 L14 11 L11 19 L8 11 Z" fill="#00000012" />
+          <rect width="22" height="22" fill={paper.color} />
+          <path d="M11 3 L14 11 L11 19 L8 11 Z" fill={paper.accent || '#00000012'} opacity="0.7" />
         </pattern>
         <pattern id="rh-laminate" width="60" height="12" patternUnits="userSpaceOnUse">
-          <rect width="60" height="12" fill={lamA} />
-          <rect x="0" y="6" width="60" height="6" fill={lamB} />
+          <rect width="60" height="12" fill={lam.color} />
+          <rect x="0" y="6" width="60" height="6" fill={lam.accent || lam.color} />
           <path d="M0 6H60M22 0V6M48 6V12" stroke="#00000030" strokeWidth="0.8" />
         </pattern>
         <linearGradient id="rh-window" x1="0" y1="0" x2="0" y2="1">
@@ -71,6 +68,7 @@ export function StageVisual({ doneStages, wallpaper, gklCeiling, tier }: StageVi
 
       {/* Ceiling */}
       <polygon points="0,0 400,0 340,34 60,34" fill={ceilingFill} />
+      {has('ceiling') && ceil.accent && <polygon points="80,4 320,4 300,24 100,24" fill={ceil.accent} opacity="0.55" />}
       {/* Left and right side walls */}
       <polygon points="0,0 60,34 60,200 0,260" fill={wallFill} opacity="0.85" />
       <polygon points="400,0 340,34 340,200 400,260" fill={wallFill} opacity="0.85" />
@@ -105,14 +103,15 @@ export function StageVisual({ doneStages, wallpaper, gklCeiling, tier }: StageVi
         y="88"
         width="54"
         height="112"
-        fill={has('doors') ? (tier === 'premium' ? '#5b4130' : '#8b6a4f') : 'none'}
+        fill={has('doors') ? door.color : 'none'}
         stroke={plastered ? '#efece6' : '#5f5c57'}
         strokeWidth="4"
       />
+      {has('doors') && door.accent && <rect x="270" y="98" width="38" height="42" fill="none" stroke={door.accent} strokeWidth="1.5" />}
       {has('doors') && <circle cx="306" cy="146" r="3" fill="#e2c27a" />}
 
       {/* Skirting */}
-      {has('floor_finish') && <rect x="60" y="195" width="280" height="5" fill={finished ? '#f5f2ec' : '#d8d4cc'} />}
+      {has('floor_finish') && <rect x="60" y="195" width="280" height="5" fill={plinthColor} />}
 
       {/* Ceiling lights */}
       {has('ceiling') && !has('engineering_finish') && (
@@ -126,9 +125,9 @@ export function StageVisual({ doneStages, wallpaper, gklCeiling, tier }: StageVi
       {/* Finish electrics: sockets, switch, glowing lights */}
       {has('engineering_finish') && (
         <g>
-          <rect x="226" y="168" width="10" height="12" rx="2" fill="#ffffff" stroke="#9b968d" />
-          <rect x="246" y="168" width="10" height="12" rx="2" fill="#ffffff" stroke="#9b968d" />
-          <rect x="244" y="120" width="9" height="13" rx="2" fill="#ffffff" stroke="#9b968d" />
+          <rect x="226" y="168" width="10" height="12" rx="2" fill={socket.color} stroke="#9b968d" />
+          <rect x="246" y="168" width="10" height="12" rx="2" fill={socket.color} stroke="#9b968d" />
+          <rect x="244" y="120" width="9" height="13" rx="2" fill={socket.color} stroke="#9b968d" />
           {[140, 200, 260].map((x) => (
             <g key={x}>
               <circle cx={x} cy="18" r="9" fill="#fde68a" opacity="0.45" />

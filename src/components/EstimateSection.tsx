@@ -3,6 +3,8 @@ import { ArrowRight, ChevronDown, ClipboardList, Pause, Play, RotateCcw } from '
 import type {
   ApartmentParams,
   BookingDraft,
+  FinishChoices,
+  FinishGroupId,
   Lang,
   MaterialTier,
   WorkItem,
@@ -20,6 +22,7 @@ import {
 } from '../data/workCatalog.ts';
 import { formatKgs, TIER_LABELS, tLoc } from '../i18n.ts';
 import { StageVisual } from './StageVisual.tsx';
+import { DEFAULT_FINISHES, FINISH_GROUPS, FINISH_GROUP_BY_ITEM, findFinish } from '../data/finishCatalog.ts';
 
 const COPY = {
   ru: {
@@ -53,6 +56,8 @@ const COPY = {
     book: 'Записаться с этой сметой',
     note: 'Объёмы рассчитаны по типовой планировке. Точная смета фиксируется в договоре после бесплатного замера.',
     edited: 'изменено',
+    areaHint: 'Введите свою площадь в м² или двигайте ползунок',
+    yourFinish: 'Ваша отделка',
   },
   ky: {
     kicker: 'Ар бир иштин сметасы',
@@ -85,6 +90,8 @@ const COPY = {
     book: 'Ушул смета менен жазылуу',
     note: 'Көлөмдөр типтүү план боюнча эсептелген. Так смета акысыз өлчөөдөн кийин келишимде бекитилет.',
     edited: 'өзгөртүлдү',
+    areaHint: 'Аянтыңызды м² менен жазыңыз же жылдыргычты жылдырыңыз',
+    yourFinish: 'Сиздин жасалгаңыз',
   },
   en: {
     kicker: 'Itemized estimate',
@@ -117,6 +124,8 @@ const COPY = {
     book: 'Book with this estimate',
     note: 'Quantities are based on a typical layout. The final price is fixed in the contract after a free measurement.',
     edited: 'edited',
+    areaHint: 'Type your area in m² or move the slider',
+    yourFinish: 'Your finishes',
   },
 } as const;
 
@@ -135,6 +144,8 @@ export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProp
   const [params, setParams] = useState<ApartmentParams>(DEFAULT_APARTMENT);
   const [enabledOverride, setEnabledOverride] = useState<Record<string, boolean>>({});
   const [qtyOverride, setQtyOverride] = useState<Record<string, number>>({});
+  const [finishes, setFinishes] = useState<FinishChoices>(DEFAULT_FINISHES);
+  const [areaText, setAreaText] = useState(String(DEFAULT_APARTMENT.areaSqm));
   const [openStage, setOpenStage] = useState<WorkStageId | null>('walls_finish');
   const [previewIdx, setPreviewIdx] = useState<number | null>(null); // null = all done
   const [playing, setPlaying] = useState(false);
@@ -224,13 +235,35 @@ export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProp
 
   const hasQtyEdits = Object.keys(qtyOverride).length > 0;
 
+  // Keep the typed area in sync when another control (room buttons, slider) changes it.
+  useEffect(() => {
+    setAreaText((txt) => (Number(txt.replace(',', '.')) === params.areaSqm ? txt : String(params.areaSqm)));
+  }, [params.areaSqm]);
+
+  // Finish choices only for jobs that are in the estimate.
+  const chosenFinishes: FinishChoices = useMemo(() => {
+    const out: FinishChoices = {};
+    for (const sel of selections) {
+      const g = FINISH_GROUP_BY_ITEM[sel.id];
+      if (g) out[g.id] = finishes[g.id] || g.options[0].id;
+    }
+    return out;
+  }, [selections, finishes]);
+
+  const setFinish = (group: FinishGroupId, optionId: string) => setFinishes((f) => ({ ...f, [group]: optionId }));
+
   const handleBook = () => {
     onBook({
       propertyType: params.propertyType,
       areaSqm: params.areaSqm,
       materialTier: params.tier,
       roomsCount: `${params.rooms}-комн`,
-      workEstimate: { params, selections, preview: estimate },
+      workEstimate: {
+        params,
+        selections,
+        finishes: chosenFinishes,
+        preview: { ...estimate, finishes: chosenFinishes },
+      },
     });
   };
 
@@ -285,16 +318,32 @@ export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProp
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-sm font-semibold text-slate-900 dark:text-white">{copy.area}</span>
-                  <span className="text-lg font-bold text-amber-600 dark:text-amber-400 tabular-nums">
-                    {params.areaSqm} м²
-                  </span>
+                  <label className="inline-flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={18}
+                      max={400}
+                      value={areaText}
+                      onChange={(e) => {
+                        setAreaText(e.target.value);
+                        const v = Number(e.target.value.replace(',', '.'));
+                        if (Number.isFinite(v) && v >= 18) update({ areaSqm: v });
+                      }}
+                      onBlur={() => setAreaText(String(params.areaSqm))}
+                      aria-label={copy.area}
+                      className="w-24 px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#16213a] border border-amber-500/50 text-lg font-bold text-amber-600 dark:text-amber-400 tabular-nums text-right"
+                    />
+                    <span className="text-lg font-bold text-amber-600 dark:text-amber-400">м²</span>
+                  </label>
                 </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1.5">{copy.areaHint}</p>
                 <input
                   type="range"
                   min={18}
                   max={250}
                   step={1}
-                  value={params.areaSqm}
+                  value={Math.min(250, params.areaSqm)}
                   onChange={(e) => update({ areaSqm: Number(e.target.value) })}
                   className="w-full accent-amber-500 cursor-pointer"
                 />
@@ -460,6 +509,14 @@ export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProp
                                 <div className="col-span-6 sm:col-span-3 text-right text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
                                   {on && line ? formatKgs(line.workKgs + line.materialsKgs) : '—'}
                                 </div>
+                                {on && FINISH_GROUP_BY_ITEM[item.id] && (
+                                  <FinishPicker
+                                    groupId={FINISH_GROUP_BY_ITEM[item.id].id}
+                                    value={finishes[FINISH_GROUP_BY_ITEM[item.id].id]}
+                                    lang={lang}
+                                    onChange={setFinish}
+                                  />
+                                )}
                               </div>
                             );
                           })}
@@ -475,12 +532,7 @@ export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProp
           {/* Right: visual preview + totals */}
           <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
             <div className="rounded-3xl bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 p-4 sm:p-5">
-              <StageVisual
-                doneStages={doneStages}
-                wallpaper={selectedIds.has('w-wall-wallpaper')}
-                gklCeiling={selectedIds.has('w-ceiling-gkl')}
-                tier={params.tier}
-              />
+              <StageVisual doneStages={doneStages} wallpaper={selectedIds.has('w-wall-wallpaper')} finishes={finishes} />
               <div className="mt-4">
                 <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                   <span>{copy.preview}:</span>
@@ -508,6 +560,27 @@ export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProp
                   className="w-full accent-amber-500 cursor-pointer mt-2"
                 />
               </div>
+              {Object.keys(chosenFinishes).length > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/10">
+                  <div className="text-xs font-semibold text-slate-900 dark:text-white mb-2">{copy.yourFinish}</div>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                    {FINISH_GROUPS.filter((g) => chosenFinishes[g.id]).map((g) => {
+                      const op = findFinish(g.id, chosenFinishes[g.id]);
+                      return (
+                        <li key={g.id} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 min-w-0">
+                          <span
+                            className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-white/20 shrink-0"
+                            style={{ background: op.color }}
+                          />
+                          <span className="truncate">
+                            {tLoc(g.label, lang)}: <span className="font-medium text-slate-900 dark:text-white">{tLoc(op.name, lang)}</span>
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <div className="rounded-3xl bg-slate-900 dark:bg-[#0e172a] text-white border border-slate-800 dark:border-amber-500/25 p-5 sm:p-6">
@@ -570,5 +643,46 @@ export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProp
         </div>
       </div>
     </section>
+  );
+}
+
+interface FinishPickerProps {
+  groupId: FinishGroupId;
+  value: string | undefined;
+  lang: Lang;
+  onChange: (group: FinishGroupId, optionId: string) => void;
+}
+
+function FinishPicker({ groupId, value, lang, onChange }: FinishPickerProps) {
+  const group = FINISH_GROUPS.find((g) => g.id === groupId)!;
+  const current = findFinish(groupId, value);
+  return (
+    <div className="col-span-12 pt-1">
+      <div className="text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+        {tLoc(group.label, lang)}: <span className="font-semibold text-slate-800 dark:text-slate-100">{tLoc(current.name, lang)}</span>
+      </div>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={tLoc(group.label, lang)}>
+        {group.options.map((op) => {
+          const active = op.id === current.id;
+          return (
+            <button
+              key={op.id}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              title={tLoc(op.name, lang)}
+              aria-label={tLoc(op.name, lang)}
+              onClick={() => onChange(groupId, op.id)}
+              className={`w-8 h-8 rounded-full border-2 cursor-pointer transition-transform ${
+                active ? 'border-amber-500 scale-110 ring-2 ring-amber-500/30' : 'border-slate-300 dark:border-white/20 hover:scale-105'
+              }`}
+              style={{
+                background: op.accent ? `linear-gradient(135deg, ${op.color} 0 55%, ${op.accent} 55% 100%)` : op.color,
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }

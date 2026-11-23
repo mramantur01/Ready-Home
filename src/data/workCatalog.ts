@@ -13,6 +13,7 @@ import type {
   WorkStageId,
   WorkUnit,
 } from '../types.ts';
+import { FINISH_GROUPS, findFinish } from './finishCatalog.ts';
 
 export interface WorkStageInfo {
   id: WorkStageId;
@@ -286,7 +287,7 @@ export function clampParams(p: Partial<ApartmentParams>): ApartmentParams {
   const num = (v: unknown, def: number) => (typeof v === 'number' && Number.isFinite(v) ? v : def);
   return {
     rooms: Math.max(1, Math.min(5, Math.round(num(p.rooms, DEFAULT_APARTMENT.rooms)))),
-    areaSqm: Math.max(18, Math.min(400, Math.round(num(p.areaSqm, DEFAULT_APARTMENT.areaSqm)))),
+    areaSqm: Math.max(18, Math.min(400, Math.round(num(p.areaSqm, DEFAULT_APARTMENT.areaSqm) * 10) / 10)),
     ceilingHeight: Math.max(2.4, Math.min(4, Math.round(num(p.ceilingHeight, DEFAULT_APARTMENT.ceilingHeight) * 100) / 100)),
     bathrooms: Math.max(1, Math.min(3, Math.round(num(p.bathrooms, DEFAULT_APARTMENT.bathrooms)))),
     propertyType: p.propertyType === 'secondary' ? 'secondary' : 'newbuild',
@@ -411,5 +412,11 @@ export function formatWorkEstimateText(est: WorkEstimate): string {
   const stages = est.stages
     .map((s) => `• ${WORK_STAGES.find((w) => w.id === s.id)?.name.ru || s.id}: ${kgs(s.totalKgs)}`)
     .join('\n');
-  return `${head}\n${stages}\nРаботы: ${kgs(est.workKgs)}, материалы: ${kgs(est.materialsKgs)}, срок ~${est.days} дн.`;
+  const finishes = FINISH_GROUPS.filter((g) => est.finishes?.[g.id])
+    .map((g) => `• ${g.label.ru}: ${findFinish(g.id, est.finishes?.[g.id]).name.ru}`)
+    .join('\n');
+  return (
+    `${head}\n${stages}\nРаботы: ${kgs(est.workKgs)}, материалы: ${kgs(est.materialsKgs)}, срок ~${est.days} дн.` +
+    (finishes ? `\nОтделка:\n${finishes}` : '')
+  );
 }

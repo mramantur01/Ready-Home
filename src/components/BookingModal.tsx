@@ -140,7 +140,11 @@ export function BookingModal({
           comment,
           visual3D: draft.visual3D,
           workEstimate: draft.workEstimate
-            ? { params: draft.workEstimate.params, selections: draft.workEstimate.selections }
+            ? {
+                params: draft.workEstimate.params,
+                selections: draft.workEstimate.selections,
+                finishes: draft.workEstimate.finishes,
+              }
             : undefined,
         }),
       },

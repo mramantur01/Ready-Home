@@ -34,6 +34,7 @@ import {
   WORK_BASIS_LABELS,
   WORK_STAGES,
 } from './src/data/workCatalog.ts';
+import { FINISH_GROUPS, sanitizeFinishes } from './src/data/finishCatalog.ts';
 
 const CLIENT_COOKIE = 'rh_client_session';
 const ADMIN_COOKIE = 'rh_admin_session';
@@ -633,7 +634,15 @@ export function createApp() {
         .map((s) => ({ id: clampStr(s.id, 40), qty: Number(s.qty) || 0 }))
         .filter((s) => s.id);
       const computed = computeWorkEstimate(db.content.priceList, params, selections);
-      if (computed.lines.length > 0) workEstimate = computed;
+      if (computed.lines.length > 0) {
+        // Keep colour choices only for jobs that are actually in the estimate.
+        const finishes = sanitizeFinishes((rawWork as { finishes?: unknown }).finishes);
+        const lineIds = new Set(computed.lines.map((l) => l.id));
+        for (const g of FINISH_GROUPS) {
+          if (!g.workItemIds.some((id) => lineIds.has(id))) delete finishes[g.id];
+        }
+        workEstimate = { ...computed, finishes };
+      }
     }
 
     const existingIds = new Set(db.bookings.map((b) => b.id));

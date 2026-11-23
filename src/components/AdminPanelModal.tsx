@@ -19,6 +19,7 @@ import type {
 import { formatKgs, STATUS_LABELS } from '../i18n.ts';
 import { apiFetch, setAdminToken } from '../apiClient.ts';
 import { PriceListEditor } from './PriceListEditor.tsx';
+import { FINISH_GROUPS, findFinish } from '../data/finishCatalog.ts';
 import { ASSET_IMAGES } from '../data/defaultContent.ts';
 
 interface AdminPanelModalProps {
@@ -509,6 +510,19 @@ export function AdminPanelModal({
                                     </li>
                                   ))}
                                 </ul>
+                                {b.workEstimate.finishes && Object.keys(b.workEstimate.finishes).length > 0 && (
+                                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                                    {FINISH_GROUPS.filter((g) => b.workEstimate?.finishes?.[g.id]).map((g) => {
+                                      const op = findFinish(g.id, b.workEstimate?.finishes?.[g.id]);
+                                      return (
+                                        <span key={g.id} className="inline-flex items-center gap-1">
+                                          <span className="w-3 h-3 rounded-full border border-slate-300" style={{ background: op.color }} />
+                                          {g.label.ru}: <strong>{op.name.ru}</strong>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </details>
                             )}
                           </div>
