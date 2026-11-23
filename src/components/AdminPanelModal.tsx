@@ -24,6 +24,7 @@ import { FinishCatalogEditor } from './FinishCatalogEditor.tsx';
 import { LayoutsEditor } from './LayoutsEditor.tsx';
 import { StatsPanel } from './StatsPanel.tsx';
 import { ScheduleEditor } from './ScheduleEditor.tsx';
+import { AiKeySettings } from './AiKeySettings.tsx';
 import { ProjectEditor } from './ProjectEditor.tsx';
 import { PortfolioEditor } from './PortfolioEditor.tsx';
 import { openContract } from '../data/contractPrint.ts';
@@ -441,7 +442,7 @@ export function AdminPanelModal({
                   ['portfolio', 'До/После и IG'],
                   ['reviews', pendingReviews.length ? `Отзывы (${pendingReviews.length} новых)` : 'Отзывы'],
                   ['contacts', 'График и контакты'],
-                  ['telegram', 'Telegram'],
+                  ['telegram', 'Telegram и ИИ'],
                 ] as Array<[AdminTab, string]>
               ).map(([tab, label]) => (
                 <button
@@ -1316,6 +1317,7 @@ export function AdminPanelModal({
               )}
 
               {/* 9. TELEGRAM */}
+              {activeTab === 'telegram' && <AiKeySettings />}
               {activeTab === 'telegram' && (
                 <div className="p-5 rounded-2xl bg-slate-50 dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 space-y-4">
                   <h4 className="font-semibold text-slate-900 dark:text-white">

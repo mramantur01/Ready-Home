@@ -406,3 +406,28 @@ export async function hitLimit(key: string, limit: number, windowSec: number): P
     return false; // never block visitors because the limiter is down
   }
 }
+
+// ------------------------------------------------------------------
+// Server-only secrets entered in the admin (e.g. the Gemini API key).
+// Never included in /api/content or backups' public parts.
+// ------------------------------------------------------------------
+const memSecrets = new Map<string, string>();
+
+export async function getSecret(name: string): Promise<string> {
+  if (!getUpstashConfig()) return memSecrets.get(name) || '';
+  try {
+    const [v] = await redis([['GET', `${P}secret:${name}`]]);
+    return typeof v === 'string' ? v : '';
+  } catch {
+    return '';
+  }
+}
+
+export async function setSecret(name: string, value: string): Promise<void> {
+  if (!getUpstashConfig()) {
+    if (value) memSecrets.set(name, value);
+    else memSecrets.delete(name);
+    return;
+  }
+  await redis([value ? ['SET', `${P}secret:${name}`, value] : ['DEL', `${P}secret:${name}`]]);
+}

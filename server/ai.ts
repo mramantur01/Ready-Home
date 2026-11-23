@@ -4,15 +4,51 @@
 import { GoogleGenAI } from '@google/genai';
 import type { FinishChoices, SiteContent } from '../src/types.ts';
 import { WORK_STAGES, WORK_UNIT_LABELS } from '../src/data/workCatalog.ts';
+import { getSecret } from './storage.ts';
 
 const MODEL = (process.env.GEMINI_MODEL || 'gemini-flash-latest').trim();
 
-export function aiEnabled(): boolean {
-  return Boolean((process.env.GEMINI_API_KEY || '').trim());
+// Key from the Vercel env var, or the one the studio pasted in the admin panel (stored server-side).
+let cachedKey: { value: string; at: number } | null = null;
+
+export function resetAiKeyCache(): void {
+  cachedKey = null;
 }
 
-function client(): GoogleGenAI {
-  return new GoogleGenAI({ apiKey: (process.env.GEMINI_API_KEY || '').trim() });
+async function apiKey(): Promise<string> {
+  const env = (process.env.GEMINI_API_KEY || '').trim();
+  if (env) return env;
+  if (cachedKey && Date.now() - cachedKey.at < 60_000) return cachedKey.value;
+  const value = (await getSecret('gemini_api_key')).trim();
+  cachedKey = { value, at: Date.now() };
+  return value;
+}
+
+export async function aiEnabled(): Promise<boolean> {
+  return Boolean(await apiKey());
+}
+
+async function client(): Promise<GoogleGenAI> {
+  return new GoogleGenAI({ apiKey: await apiKey() });
+}
+
+// Tiny request to check that a key works before saving it.
+export async function testKey(key: string): Promise<string | null> {
+  try {
+    const res = await new GoogleGenAI({ apiKey: key }).models.generateContent({
+      model: MODEL,
+      contents: [{ role: 'user', parts: [{ text: 'Ответь одним словом: ок' }] }],
+      config: { maxOutputTokens: 20 },
+    });
+    return res.text !== undefined ? null : 'Пустой ответ от Gemini';
+  } catch (err) {
+    const text = err instanceof Error ? err.message : String(err);
+    if (/API key not valid|API_KEY_INVALID/i.test(text)) return 'ключ недействителен — скопируйте его заново целиком.';
+    if (/PERMISSION_DENIED|SERVICE_DISABLED/i.test(text)) return 'для ключа не включён Gemini API в Google Cloud.';
+    if (/not found|NOT_FOUND/i.test(text)) return `модель ${MODEL} недоступна для этого ключа.`;
+    if (/quota|RESOURCE_EXHAUSTED/i.test(text)) return 'исчерпан лимит запросов Google — попробуйте позже.';
+    return text.slice(0, 200);
+  }
 }
 
 function priceSheet(content: SiteContent): string {
@@ -46,7 +82,7 @@ export async function chat(content: SiteContent, history: ChatMessage[]): Promis
 Контакты: телефон ${c.phone}, WhatsApp +${c.whatsapp}, Telegram @${c.telegram}, адрес: ${c.address.ru}, часы: ${c.workHours.ru}.
 Прайс (цена за единицу):
 ${priceSheet(content)}`;
-  const res = await client().models.generateContent({
+  const res = await (await client()).models.generateContent({
     model: MODEL,
     contents: history.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
     config: { systemInstruction: system, maxOutputTokens: 600, temperature: 0.4 },
@@ -69,7 +105,7 @@ export async function designFromPhoto(content: SiteContent, mimeType: string, ba
 Каталог:
 ${catalog}
 Ответ — JSON: {"options":[{"name":"Короткое название стиля","description":"1–2 предложения, почему подходит","finishes":{"<group id>":"<option id>"}}]}`;
-  const res = await client().models.generateContent({
+  const res = await (await client()).models.generateContent({
     model: MODEL,
     contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: base64 } }, { text: prompt }] }],
     config: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 1500 },

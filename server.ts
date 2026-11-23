@@ -21,8 +21,10 @@ import {
   deletePhoto,
   getPhoto,
   getStats,
+  getSecret,
   hitLimit,
   incrStat,
+  setSecret,
   putPhoto,
   listBackups,
   readBackup,
@@ -51,7 +53,7 @@ import {
 } from './src/data/workCatalog.ts';
 import { FINISH_GROUPS, sanitizeFinishes } from './src/data/finishCatalog.ts';
 import { buildSlots, isSlotFree } from './src/data/schedule.ts';
-import { aiEnabled, chat as aiChat, designFromPhoto, type ChatMessage } from './server/ai.ts';
+import { aiEnabled, chat as aiChat, designFromPhoto, resetAiKeyCache, testKey, type ChatMessage } from './server/ai.ts';
 
 const CLIENT_COOKIE = 'rh_client_session';
 const ADMIN_COOKIE = 'rh_admin_session';
@@ -824,12 +826,50 @@ export function createApp() {
     return crypto.createHash('sha256').update(`rh:${ip}`).digest('hex').slice(0, 24);
   };
 
-  app.get('/api/ai/status', (_req, res) => {
-    res.json({ enabled: aiEnabled() });
+  app.get('/api/ai/status', async (_req, res) => {
+    res.json({ enabled: await aiEnabled() });
+  });
+
+  // Admin pastes the Gemini key here instead of the Vercel dashboard. The key is checked,
+  // stored server-side and never sent back (only whether it is set and its last 4 chars).
+  app.get('/api/admin/ai-key', async (req, res) => {
+    if (!extractSession(req, ADMIN_COOKIE, 'admin')) {
+      res.status(401).json({ error: 'Доступ только для администратора.' });
+      return;
+    }
+    const env = Boolean((process.env.GEMINI_API_KEY || '').trim());
+    const stored = await getSecret('gemini_api_key');
+    res.json({ fromEnv: env, configured: env || Boolean(stored), last4: stored ? stored.slice(-4) : '' });
+  });
+
+  app.post('/api/admin/ai-key', async (req, res) => {
+    if (!extractSession(req, ADMIN_COOKIE, 'admin')) {
+      res.status(401).json({ error: 'Доступ только для администратора.' });
+      return;
+    }
+    const key = clampStr(req.body?.key, 200).trim();
+    if (!key) {
+      await setSecret('gemini_api_key', '');
+      resetAiKeyCache();
+      res.json({ ok: true, configured: false });
+      return;
+    }
+    if (!/^[A-Za-z0-9_-]{30,}$/.test(key)) {
+      res.status(400).json({ error: 'Это не похоже на ключ Gemini (обычно начинается с AIza…).' });
+      return;
+    }
+    const problem = await testKey(key);
+    if (problem) {
+      res.status(400).json({ error: `Gemini не принял ключ: ${problem}` });
+      return;
+    }
+    await setSecret('gemini_api_key', key);
+    resetAiKeyCache();
+    res.json({ ok: true, configured: true, last4: key.slice(-4) });
   });
 
   app.post('/api/ai/chat', async (req, res) => {
-    if (!aiEnabled()) {
+    if (!(await aiEnabled())) {
       res.status(503).json({ error: 'ИИ-консультант пока не подключён.' });
       return;
     }
@@ -857,7 +897,7 @@ export function createApp() {
   });
 
   app.post('/api/ai/design', async (req, res) => {
-    if (!aiEnabled()) {
+    if (!(await aiEnabled())) {
       res.status(503).json({ error: 'Подбор по фото пока не подключён.' });
       return;
     }
