@@ -18,8 +18,11 @@ import {
 import {
   exportBackup,
   getDb,
+  deletePhoto,
+  getPhoto,
   getStats,
   incrStat,
+  putPhoto,
   listBackups,
   readBackup,
   saveDb,
@@ -36,7 +39,7 @@ import type {
   SiteContent,
   Visual3DConfig,
 } from './src/types.ts';
-import type { ApartmentLayout, FinishGroupConfig, ScheduleConfig, FinishOptionConfig, ReviewItem, WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
+import type { ApartmentLayout, FinishGroupConfig, ProjectProgress, ProjectStageStatus, ScheduleConfig, FinishOptionConfig, ReviewItem, WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
 import { calculateRenovationEstimate } from './src/data/defaultContent.ts';
 import {
   clampParams,
@@ -168,6 +171,34 @@ function sanitizeSchedule(raw: Partial<ScheduleConfig>, cur: ScheduleConfig): Sc
   };
 }
 
+const STAGE_STATUSES: ProjectStageStatus[] = ['planned', 'in_progress', 'ready', 'accepted'];
+
+function sanitizeProject(raw: unknown, current?: ProjectProgress): ProjectProgress | undefined {
+  if (!raw || typeof raw !== 'object') return current;
+  const r = raw as Partial<ProjectProgress>;
+  if (!Array.isArray(r.stages)) return current;
+  return {
+    startedAt: current?.startedAt || new Date().toISOString(),
+    stages: r.stages.slice(0, 20).map((st, idx) => {
+      const prev = current?.stages.find((c) => c.id === st?.id);
+      const status = STAGE_STATUSES.includes(st?.status as ProjectStageStatus) ? (st.status as ProjectStageStatus) : 'planned';
+      return {
+        id: /^[A-Za-z0-9_-]{1,40}$/.test(String(st?.id)) ? String(st.id) : `st-${idx}`,
+        name: clampStr(st?.name, 120) || `Этап ${idx + 1}`,
+        amountKgs: Math.max(0, Math.min(1_000_000_000, Math.round(Number(st?.amountKgs) || 0))),
+        paidKgs: Math.max(0, Math.min(1_000_000_000, Math.round(Number(st?.paidKgs) || 0))),
+        status,
+        // acceptance is recorded by the client's own action; keep the original time
+        acceptedAt: status === 'accepted' ? prev?.acceptedAt || new Date().toISOString() : undefined,
+        photos: (Array.isArray(st?.photos) ? st.photos : [])
+          .filter((ph) => ph && /^[a-f0-9]{32}$/.test(String(ph.id)))
+          .slice(0, 60)
+          .map((ph) => ({ id: String(ph.id), caption: clampStr(ph.caption, 140) || undefined, at: clampStr(ph.at, 30) || new Date().toISOString() })),
+      };
+    }),
+  };
+}
+
 function withRuFallback(name: LocalizedText): LocalizedText {
   return { ru: name.ru, ky: name.ky || name.ru, en: name.en || name.ru };
 }
@@ -240,7 +271,7 @@ function generateBookingCode(existingIds: Set<string>): string {
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '2mb' })); // photo uploads are ~0.3–1 MB after in-browser compression
 
   // ------------------------------------------------------------------
   // ADMIN STATUS, FIRST-RUN CLAIM & LOGIN (/api/login)
@@ -611,6 +642,30 @@ export function createApp() {
       return;
     }
 
+    if (action === 'accept-stage') {
+      const session = extractSession(req, CLIENT_COOKIE, 'client');
+      if (!session?.phone) {
+        res.status(401).json({ error: 'Войдите в личный кабинет.' });
+        return;
+      }
+      const booking = db.bookings.find((b) => b.id === clampStr(req.body?.bookingId, 24) && b.phone === session.phone);
+      const stage = booking?.project?.stages.find((s) => s.id === clampStr(req.body?.stageId, 40));
+      if (!booking || !stage) {
+        res.status(404).json({ error: 'Этап не найден.' });
+        return;
+      }
+      if (stage.status !== 'ready') {
+        res.status(400).json({ error: 'Этап ещё не готов к приёмке.' });
+        return;
+      }
+      stage.status = 'accepted';
+      stage.acceptedAt = new Date().toISOString();
+      await saveDb(db);
+      void sendTelegramNotification(`✅ ${booking.clientName} принял(а) этап «${stage.name}» по заявке ${booking.id}.`);
+      res.json({ ok: true, booking });
+      return;
+    }
+
     if (action === 'link-booking') {
       const session = extractSession(req, CLIENT_COOKIE, 'client');
       if (!session || !session.phone) {
@@ -715,6 +770,49 @@ export function createApp() {
   // ------------------------------------------------------------------
   // QUICK LEAD (/api/leads): name + phone, no account needed
   // ------------------------------------------------------------------
+  app.post('/api/photos', async (req, res) => {
+    const admin = extractSession(req, ADMIN_COOKIE, 'admin');
+    if (!admin) {
+      res.status(401).json({ error: 'Доступ только для администратора.' });
+      return;
+    }
+    const data = typeof req.body?.data === 'string' ? req.body.data : '';
+    const m = data.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+    if (!m) {
+      res.status(400).json({ error: 'Нужна картинка JPEG, PNG или WebP.' });
+      return;
+    }
+    const bytes = Buffer.from(m[2], 'base64');
+    const magicOk =
+      (m[1] === 'jpeg' && bytes[0] === 0xff && bytes[1] === 0xd8) ||
+      (m[1] === 'png' && bytes.subarray(1, 4).toString() === 'PNG') ||
+      (m[1] === 'webp' && bytes.subarray(8, 12).toString() === 'WEBP');
+    if (!magicOk || bytes.length > 1_200_000) {
+      res.status(400).json({ error: 'Файл повреждён или слишком большой (до 1,2 МБ после сжатия).' });
+      return;
+    }
+    const id = crypto.randomBytes(16).toString('hex');
+    await putPhoto(id, data);
+    res.status(201).json({ ok: true, id });
+  });
+
+  app.get('/api/photo/:id', async (req, res) => {
+    const id = String(req.params.id);
+    if (!/^[a-f0-9]{32}$/.test(id)) {
+      res.status(404).end();
+      return;
+    }
+    const data = await getPhoto(id);
+    const m = data?.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+    if (!m) {
+      res.status(404).end();
+      return;
+    }
+    res.setHeader('Content-Type', m[1]);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(Buffer.from(m[2], 'base64'));
+  });
+
   app.get('/api/slots', async (req, res) => {
     const db = await getDb();
     const days = Math.max(1, Math.min(31, Math.round(Number(req.query.days) || 14)));
@@ -956,6 +1054,16 @@ export function createApp() {
       if (master) {
         target.masterId = master.id;
         target.masterName = master.name;
+      }
+    }
+    if (req.body?.project !== undefined) {
+      const before = new Set((target.project?.stages || []).flatMap((s) => s.photos.map((p) => p.id)));
+      target.project = sanitizeProject(req.body.project, target.project);
+      const after = new Set((target.project?.stages || []).flatMap((s) => s.photos.map((p) => p.id)));
+      for (const id of before) if (!after.has(id)) void deletePhoto(id);
+      const ready = target.project?.stages.filter((s) => s.status === 'ready') || [];
+      if (ready.length) {
+        void sendTelegramNotification(`📋 ${target.id}: этап «${ready[0].name}» отмечен готовым — ждём приёмки клиентом ${target.clientName}.`);
       }
     }
     if (typeof req.body?.note === 'string') {

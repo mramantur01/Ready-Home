@@ -351,3 +351,32 @@ export async function getStats(days: number): Promise<Array<{ day: string; count
     return list.map((day) => ({ day, counts: {} }));
   }
 }
+
+// ------------------------------------------------------------------
+// Photo reports: compressed JPEG/PNG/WebP stored as base64 under an
+// unguessable id (served by /api/photo/<id>).
+// ------------------------------------------------------------------
+const PHOTO_PREFIX = `${P}photo:`;
+const memPhotos = new Map<string, string>();
+
+export async function putPhoto(id: string, dataUrl: string): Promise<void> {
+  if (!getUpstashConfig()) {
+    memPhotos.set(id, dataUrl);
+    return;
+  }
+  await redis([['SET', PHOTO_PREFIX + id, dataUrl]]);
+}
+
+export async function getPhoto(id: string): Promise<string | null> {
+  if (!getUpstashConfig()) return memPhotos.get(id) || null;
+  const [v] = await redis([['GET', PHOTO_PREFIX + id]]);
+  return typeof v === 'string' ? v : null;
+}
+
+export async function deletePhoto(id: string): Promise<void> {
+  if (!getUpstashConfig()) {
+    memPhotos.delete(id);
+    return;
+  }
+  await redis([['DEL', PHOTO_PREFIX + id]]);
+}

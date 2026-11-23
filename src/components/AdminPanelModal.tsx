@@ -24,6 +24,7 @@ import { FinishCatalogEditor } from './FinishCatalogEditor.tsx';
 import { LayoutsEditor } from './LayoutsEditor.tsx';
 import { StatsPanel } from './StatsPanel.tsx';
 import { ScheduleEditor } from './ScheduleEditor.tsx';
+import { ProjectEditor } from './ProjectEditor.tsx';
 import { openContract } from '../data/contractPrint.ts';
 import { buyLabel, computeShoppingList } from '../data/materialsCatalog.ts';
 import { ASSET_IMAGES } from '../data/defaultContent.ts';
@@ -203,6 +204,8 @@ export function AdminPanelModal({
     onContentSaved(res.data);
     showToast('Изменения сохранены и сразу видны на сайте.');
   };
+
+  const [projectOpen, setProjectOpen] = useState<string | null>(null);
 
   const handleBookingPatch = async (id: string, change: { masterId?: string; note?: string }, okMsg: string) => {
     const res = await apiFetch<{ ok?: boolean; booking?: BookingRecord }>('/api/bookings', {
@@ -568,6 +571,12 @@ export function AdminPanelModal({
                               }}
                               className="mt-1.5 w-full max-w-xl px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/15 text-xs text-slate-900 dark:text-white"
                             />
+                            {projectOpen === b.id && (
+                              <ProjectEditor
+                                booking={b}
+                                onSaved={(nb) => setBookings((prev) => prev.map((x) => (x.id === nb.id ? { ...nb, adminNote: x.adminNote } : x)))}
+                              />
+                            )}
                             {b.workEstimate && (
                               <details className="text-xs text-slate-600 dark:text-slate-300 pt-1">
                                 <summary className="cursor-pointer text-amber-600 dark:text-amber-400 font-medium">
@@ -621,6 +630,14 @@ export function AdminPanelModal({
                                 </option>
                               ))}
                             </select>
+                            <button
+                              type="button"
+                              onClick={() => setProjectOpen(projectOpen === b.id ? null : b.id)}
+                              aria-expanded={projectOpen === b.id}
+                              className="px-2.5 py-1.5 rounded-lg border border-emerald-500/50 text-emerald-600 dark:text-emerald-400 text-xs font-semibold cursor-pointer"
+                            >
+                              Ход работ
+                            </button>
                             <button
                               type="button"
                               onClick={() => openContract(b, content)}

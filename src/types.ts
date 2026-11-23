@@ -343,6 +343,30 @@ export interface BookingRecord {
   adminNote?: string; // only in admin API responses
   source?: 'quick'; // "перезвоните мне" request without an account or a chosen date
   contactMethod?: 'call' | 'whatsapp' | 'telegram';
+  project?: ProjectProgress; // renovation progress shown in the client cabinet
+}
+
+export type ProjectStageStatus = 'planned' | 'in_progress' | 'ready' | 'accepted';
+
+export interface ProjectPhoto {
+  id: string; // served from /api/photo/<id>
+  caption?: string;
+  at: string;
+}
+
+export interface ProjectStage {
+  id: string;
+  name: string;
+  amountKgs: number;
+  paidKgs: number;
+  status: ProjectStageStatus; // ready = waiting for the client's acceptance
+  acceptedAt?: string;
+  photos: ProjectPhoto[];
+}
+
+export interface ProjectProgress {
+  startedAt: string;
+  stages: ProjectStage[];
 }
 
 export interface ClientProfile {

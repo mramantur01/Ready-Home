@@ -15,6 +15,7 @@ import {
 import type { BookingRecord, ClientProfile, Lang, SiteContent } from '../types.ts';
 import { formatKgs, PROPERTY_LABELS, STATUS_LABELS, TIER_LABELS } from '../i18n.ts';
 import { apiFetch, setClientToken } from '../apiClient.ts';
+import { ProjectTimeline } from './ProjectTimeline.tsx';
 
 interface ClientCabinetModalProps {
   open: boolean;
@@ -499,8 +500,9 @@ export function ClientCabinetModal({
                       {bookings.map((b) => (
                         <div
                           key={b.id}
-                          className="rounded-2xl bg-slate-50 dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                          className="rounded-2xl bg-slate-50 dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 p-4"
                         >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                               <span className="font-bold text-amber-600 dark:text-amber-400 tabular-nums">
@@ -512,7 +514,7 @@ export function ClientCabinetModal({
                               </span>
                               <span aria-hidden="true">·</span>
                               <span className="tabular-nums">
-                                {b.date} в {b.time}
+                                {b.date ? `${b.date} в ${b.time}` : 'Ждёт звонка студии'}
                               </span>
                             </div>
                             <div className="font-semibold text-slate-900 dark:text-white">
@@ -544,6 +546,11 @@ export function ClientCabinetModal({
                               </button>
                             )}
                           </div>
+                          </div>
+                          <ProjectTimeline
+                            booking={b}
+                            onUpdated={(nb) => onAuthChange(profile, bookings.map((x) => (x.id === nb.id ? nb : x)))}
+                          />
                         </div>
                       ))}
                     </div>
