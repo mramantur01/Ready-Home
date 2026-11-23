@@ -62,9 +62,9 @@ export function HeroCompact({ content, lang, slideIdx, setSlideIdx, avgRating, o
 
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-[#0c1425] to-[#131d33] text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-8 lg:py-14 grid lg:grid-cols-12 gap-6 lg:gap-10 items-center">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-8 lg:py-14 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center">
         {/* Photo card (first on phones, right on desktop) */}
-        <div className="lg:col-span-6 lg:order-2 relative">
+        <div className="lg:col-span-6 lg:order-2 relative min-w-0">
           <div className="relative h-44 sm:h-64 lg:h-[420px] rounded-3xl overflow-hidden ring-1 ring-white/10">
             <AnimatePresence mode="wait">
               <motion.div
@@ -116,7 +116,7 @@ export function HeroCompact({ content, lang, slideIdx, setSlideIdx, avgRating, o
         </div>
 
         {/* Text + actions */}
-        <div className="lg:col-span-6 lg:order-1">
+        <div className="lg:col-span-6 lg:order-1 min-w-0">
           <p className="text-xs sm:text-sm font-semibold text-amber-400 mb-2">{copy.kicker}</p>
           <h1
             className="text-[26px] leading-[1.15] sm:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white"
