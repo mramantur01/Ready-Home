@@ -22,7 +22,7 @@ export function LayoutPlan({ layout, lang }: { layout: ApartmentLayout; lang: La
   const spaces = layout.spaces || [];
   const living = spaces.filter((s) => s.kind === 'living');
   const used = spaces.reduce((sum, s) => sum + s.area, 0);
-  const hall = Math.max(2, layout.areaSqm - used);
+  const hall = Math.max(2, Math.round((layout.areaSqm - used) * 10) / 10);
   const bottom = [
     ...spaces.filter((s) => s.kind === 'kitchen').map((s) => ({ label: copy.kitchen, area: s.area, fill: '#fde7b0' })),
     ...spaces.filter((s) => s.kind === 'bath').map((s) => ({ label: copy.bath, area: s.area, fill: '#cfe6f2' })),
