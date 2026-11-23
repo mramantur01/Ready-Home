@@ -25,7 +25,7 @@ import type {
   SiteContent,
   Visual3DConfig,
 } from './src/types.ts';
-import type { WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
+import type { ReviewItem, WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
 import { calculateRenovationEstimate } from './src/data/defaultContent.ts';
 import {
   clampParams,
@@ -355,6 +355,7 @@ export function createApp() {
         phone: account.phone,
         createdAt: account.createdAt,
         savedPresets: account.savedPresets || [],
+        savedEstimates: account.savedEstimates || [],
       },
       bookings,
     });
@@ -470,6 +471,7 @@ export function createApp() {
           phone: account.phone,
           createdAt: account.createdAt,
           savedPresets: account.savedPresets || [],
+          savedEstimates: account.savedEstimates || [],
         },
         bookings,
       });
@@ -524,6 +526,36 @@ export function createApp() {
       account.savedPresets = [preset, ...(account.savedPresets || [])].slice(0, 12);
       await saveDb(db);
       res.json({ ok: true, savedPresets: account.savedPresets });
+      return;
+    }
+
+    if (action === 'save-estimate' || action === 'delete-estimate') {
+      const session = extractSession(req, CLIENT_COOKIE, 'client');
+      const account = session?.phone ? db.clients[session.phone] : undefined;
+      if (!account) {
+        res.status(401).json({ error: 'Войдите в кабинет, чтобы сохранить смету.' });
+        return;
+      }
+      if (action === 'delete-estimate') {
+        const id = clampStr(req.body?.id, 40);
+        account.savedEstimates = (account.savedEstimates || []).filter((e) => e.id !== id);
+      } else {
+        const code = clampStr(req.body?.code, 6000);
+        if (!/^[A-Za-z0-9_-]{4,6000}$/.test(code)) {
+          res.status(400).json({ error: 'Некорректные данные сметы.' });
+          return;
+        }
+        const saved = {
+          id: `est-${Date.now()}`,
+          label: clampStr(req.body?.label, 100) || 'Моя смета',
+          createdAt: new Date().toISOString(),
+          code,
+          totalKgs: Math.max(0, Math.min(1_000_000_000, Math.round(Number(req.body?.totalKgs) || 0))),
+        };
+        account.savedEstimates = [saved, ...(account.savedEstimates || [])].slice(0, 12);
+      }
+      await saveDb(db);
+      res.json({ ok: true, savedEstimates: account.savedEstimates });
       return;
     }
 
@@ -729,9 +761,11 @@ export function createApp() {
   // ------------------------------------------------------------------
   // REVIEWS (/api/reviews)
   // ------------------------------------------------------------------
-  app.get('/api/reviews', async (_req, res) => {
+  app.get('/api/reviews', async (req, res) => {
     const db = await getDb();
-    res.json({ reviews: db.reviews });
+    const admin = extractSession(req, ADMIN_COOKIE, 'admin');
+    // Admins see the moderation queue; visitors only approved reviews.
+    res.json({ reviews: admin && req.query.all === '1' ? db.reviews : db.reviews.filter((r) => r.status !== 'pending') });
   });
 
   app.post('/api/reviews', async (req, res) => {
@@ -746,18 +780,43 @@ export function createApp() {
     }
 
     const db = await getDb();
-    const review = {
+    // New reviews wait for the admin's approval before they appear on the site.
+    const review: ReviewItem = {
       id: `rev-${Date.now()}`,
       author,
       projectInfo,
       rating,
       text,
       createdAt: new Date().toISOString().slice(0, 10),
+      status: 'pending',
     };
-    db.reviews.unshift(review);
-    db.reviews = db.reviews.slice(0, 80);
+    const pending = db.reviews.filter((r) => r.status === 'pending');
+    const approved = db.reviews.filter((r) => r.status !== 'pending');
+    // Cap the moderation queue so spam cannot push real reviews out.
+    db.reviews = [review, ...pending].slice(0, 50).concat(approved.slice(0, 80));
     await saveDb(db);
-    res.status(201).json({ ok: true, review });
+    void sendTelegramNotification(
+      `💬 Новый отзыв на модерации от ${author} (${rating}★): ${text.slice(0, 200)}\nОдобрите его в админке → Отзывы.`,
+    );
+    res.status(201).json({ ok: true, pending: true });
+  });
+
+  app.patch('/api/reviews', async (req, res) => {
+    const admin = extractSession(req, ADMIN_COOKIE, 'admin');
+    if (!admin) {
+      res.status(401).json({ error: 'Доступ только для администратора.' });
+      return;
+    }
+    const id = clampStr(req.body?.id, 60);
+    const db = await getDb();
+    const target = db.reviews.find((r) => r.id === id);
+    if (!target) {
+      res.status(404).json({ error: 'Отзыв не найден.' });
+      return;
+    }
+    target.status = 'approved';
+    await saveDb(db);
+    res.json({ ok: true, review: target });
   });
 
   app.delete('/api/reviews', async (req, res) => {

@@ -132,7 +132,7 @@ export const UI_COPY = {
       textPlaceholder: 'Расскажите о сроках, качестве отделки и работе прораба...',
       submit: 'Опубликовать отзыв',
       submitting: 'Отправка...',
-      thanks: 'Спасибо! Ваш отзыв опубликован.',
+      thanks: 'Спасибо! Отзыв отправлен и появится на сайте после проверки.',
     },
     faq: {
       kicker: 'Частые вопросы',
@@ -275,7 +275,7 @@ export const UI_COPY = {
       textPlaceholder: 'Мөөнөт, сапат жана прорабдын иши тууралуу жазыңыз...',
       submit: 'Пикирди жарыялоо',
       submitting: 'Жөнөтүлүүдө...',
-      thanks: 'Рахмат! Пикириңиз жарыяланды.',
+      thanks: 'Рахмат! Пикириңиз текшерүүдөн кийин сайтка чыгат.',
     },
     faq: {
       kicker: 'Көп берилүүчү суроолор',
@@ -418,7 +418,7 @@ export const UI_COPY = {
       textPlaceholder: 'Tell us about quality, timeline, and communication...',
       submit: 'Publish Review',
       submitting: 'Publishing...',
-      thanks: 'Thank you! Your review is live.',
+      thanks: 'Thank you! Your review will appear after moderation.',
     },
     faq: {
       kicker: 'Frequently Asked Questions',

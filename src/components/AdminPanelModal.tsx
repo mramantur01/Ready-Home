@@ -95,7 +95,15 @@ export function AdminPanelModal({
     }
   };
 
+  const [adminReviews, setAdminReviews] = useState<ReviewItem[]>(reviews);
+
+  const fetchAdminReviews = async () => {
+    const res = await apiFetch<{ reviews?: ReviewItem[] }>('/api/reviews?all=1', { auth: 'admin' });
+    if (res.ok && Array.isArray(res.data.reviews)) setAdminReviews(res.data.reviews);
+  };
+
   const fetchBookings = async () => {
+    void fetchAdminReviews();
     const res = await apiFetch<{ bookings?: BookingRecord[] }>('/api/bookings', { auth: 'admin' });
     if (res.ok && Array.isArray(res.data.bookings)) {
       setBookings(res.data.bookings);
@@ -205,10 +213,24 @@ export function AdminPanelModal({
       auth: 'admin',
     });
     if (res.ok) {
-      await onReviewsChanged();
+      await Promise.all([onReviewsChanged(), fetchAdminReviews()]);
       showToast('Отзыв удалён.');
     }
   };
+
+  const handleApproveReview = async (id: string) => {
+    const res = await apiFetch('/api/reviews', {
+      method: 'PATCH',
+      auth: 'admin',
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) {
+      await Promise.all([onReviewsChanged(), fetchAdminReviews()]);
+      showToast('Отзыв опубликован на сайте.');
+    }
+  };
+
+  const pendingReviews = adminReviews.filter((r) => r.status === 'pending');
 
   const handleTelegramTest = async () => {
     const res = await apiFetch<{ sent?: boolean; reason?: string }>('/api/telegram-test', {
@@ -388,7 +410,7 @@ export function AdminPanelModal({
                   ['promos', 'Акции и скидки'],
                   ['masters', 'Мастера'],
                   ['portfolio', 'До/После и IG'],
-                  ['reviews', 'Отзывы'],
+                  ['reviews', pendingReviews.length ? `Отзывы (${pendingReviews.length} новых)` : 'Отзывы'],
                   ['contacts', 'График и контакты'],
                   ['telegram', 'Telegram'],
                 ] as Array<[AdminTab, string]>
@@ -1014,20 +1036,43 @@ export function AdminPanelModal({
               {activeTab === 'reviews' && (
                 <div className="space-y-3">
                   <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
-                    Отзывы клиентов ({reviews.length})
+                    Отзывы клиентов ({adminReviews.length}
+                    {pendingReviews.length > 0 && `, ждут проверки: ${pendingReviews.length}`})
                   </h4>
-                  {reviews.map((rev) => (
+                  <p className="text-xs text-slate-500">
+                    Новые отзывы видны на сайте только после того, как вы нажмёте «Опубликовать».
+                  </p>
+                  {[...pendingReviews, ...adminReviews.filter((r) => r.status !== 'pending')].map((rev) => (
                     <div
                       key={rev.id}
-                      className="p-4 rounded-2xl bg-slate-50 dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 flex items-start justify-between gap-4"
+                      className={`p-4 rounded-2xl border flex items-start justify-between gap-4 ${
+                        rev.status === 'pending'
+                          ? 'bg-amber-500/10 border-amber-500/40'
+                          : 'bg-slate-50 dark:bg-[#0f172a] border-slate-200 dark:border-white/10'
+                      }`}
                     >
                       <div>
                         <div className="font-semibold text-sm text-slate-900 dark:text-white">
                           {rev.author} · {rev.rating} ★
+                          {rev.status === 'pending' && (
+                            <span className="ml-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-slate-950">
+                              на проверке
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-slate-500">{rev.projectInfo}</div>
                         <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{rev.text}</p>
                       </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                      {rev.status === 'pending' && (
+                        <button
+                          type="button"
+                          onClick={() => void handleApproveReview(rev.id)}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-semibold cursor-pointer"
+                        >
+                          Опубликовать
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => void handleDeleteReview(rev.id)}
@@ -1036,6 +1081,7 @@ export function AdminPanelModal({
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      </div>
                     </div>
                   ))}
                 </div>

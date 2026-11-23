@@ -17,7 +17,9 @@ export interface DatabaseState {
 
 const DATA_DIR = path.resolve(process.cwd(), '.data');
 const DATA_FILE = path.join(DATA_DIR, 'readyhome-db.json');
-const REDIS_KEY = 'readyhome:state:v1';
+// Preview deployments share the Upstash database with production, so they use their own key
+// and test bookings never reach the real CRM.
+const REDIS_KEY = process.env.VERCEL_ENV === 'preview' ? 'readyhome:preview:state:v1' : 'readyhome:state:v1';
 
 function getUpstashConfig(): { url: string; token: string } | null {
   const url = (process.env.KV_REST_API_URL || '').trim();

@@ -294,6 +294,15 @@ export interface ClientProfile {
     createdAt: string;
     config: Visual3DConfig;
   }>;
+  savedEstimates?: SavedEstimate[];
+}
+
+export interface SavedEstimate {
+  id: string;
+  label: string;
+  createdAt: string;
+  code: string; // encoded estimate, opens via #estimate=CODE
+  totalKgs: number;
 }
 
 export interface ReviewItem {
@@ -303,6 +312,7 @@ export interface ReviewItem {
   rating: number;
   text: string;
   createdAt: string;
+  status?: 'pending' | 'approved'; // missing = approved (older reviews)
 }
 
 export interface BookingDraft {

@@ -613,6 +613,39 @@ export function ClientCabinetModal({
                     )}
                   </div>
 
+                  {profile.savedEstimates && profile.savedEstimates.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2.5">
+                        Сохранённые сметы
+                      </h4>
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        {profile.savedEstimates.map((est) => (
+                          <div
+                            key={est.id}
+                            className="rounded-2xl bg-slate-50 dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 p-4"
+                          >
+                            <div className="font-semibold text-sm text-slate-900 dark:text-white">{est.label}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                              {new Date(est.createdAt).toLocaleDateString('ru-RU')}
+                            </div>
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                                {formatKgs(est.totalKgs)}
+                              </span>
+                              <a
+                                href={`#estimate=${est.code}`}
+                                onClick={onClose}
+                                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950"
+                              >
+                                Открыть смету
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {profile.savedPresets && profile.savedPresets.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2.5">

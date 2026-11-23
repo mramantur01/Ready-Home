@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, ChevronDown, ClipboardList, Pause, Play, RotateCcw } from 'lucide-react';
+import { ArrowRight, Bookmark, Check, ChevronDown, ClipboardList, FileDown, Pause, Play, RotateCcw, Share2 } from 'lucide-react';
 import type {
   ApartmentParams,
   BookingDraft,
+  ContactsConfig,
   FinishChoices,
   FinishGroupId,
   Lang,
@@ -22,6 +23,8 @@ import {
 } from '../data/workCatalog.ts';
 import { formatKgs, TIER_LABELS, tLoc } from '../i18n.ts';
 import { StageVisual } from './StageVisual.tsx';
+import { decodeEstimate, encodeEstimate, estimateShareUrl } from '../data/estimateShare.ts';
+import { openPrintableEstimate } from '../data/estimatePrint.ts';
 import { DEFAULT_FINISHES, FINISH_GROUPS, FINISH_GROUP_BY_ITEM, findFinish } from '../data/finishCatalog.ts';
 
 const COPY = {
@@ -58,6 +61,13 @@ const COPY = {
     edited: 'изменено',
     areaHint: 'Введите свою площадь в м² или двигайте ползунок',
     yourFinish: 'Ваша отделка',
+    pdf: 'Скачать PDF',
+    share: 'Поделиться',
+    copied: 'Ссылка скопирована',
+    save: 'Сохранить в кабинет',
+    saved: 'Сохранено в кабинете',
+    shareText: 'Моя смета на ремонт в READY HOME',
+    popupBlocked: 'Разрешите всплывающие окна, чтобы открыть PDF.',
   },
   ky: {
     kicker: 'Ар бир иштин сметасы',
@@ -92,6 +102,13 @@ const COPY = {
     edited: 'өзгөртүлдү',
     areaHint: 'Аянтыңызды м² менен жазыңыз же жылдыргычты жылдырыңыз',
     yourFinish: 'Сиздин жасалгаңыз',
+    pdf: 'PDF жүктөө',
+    share: 'Бөлүшүү',
+    copied: 'Шилтеме көчүрүлдү',
+    save: 'Кабинетке сактоо',
+    saved: 'Кабинетте сакталды',
+    shareText: 'READY HOME оңдоо сметам',
+    popupBlocked: 'PDF ачуу үчүн калкып чыкма терезелерге уруксат бериңиз.',
   },
   en: {
     kicker: 'Itemized estimate',
@@ -126,20 +143,30 @@ const COPY = {
     edited: 'edited',
     areaHint: 'Type your area in m² or move the slider',
     yourFinish: 'Your finishes',
+    pdf: 'Download PDF',
+    share: 'Share',
+    copied: 'Link copied',
+    save: 'Save to account',
+    saved: 'Saved to your account',
+    shareText: 'My READY HOME renovation estimate',
+    popupBlocked: 'Allow pop-ups to open the PDF.',
   },
 } as const;
 
 interface EstimateSectionProps {
   priceList: WorkItem[];
   lang: Lang;
+  contacts: ContactsConfig;
   onBook: (draft: BookingDraft) => void;
+  // Returns true when saved; asks the visitor to log in otherwise.
+  onSaveEstimate: (data: { code: string; label: string; totalKgs: number }) => Promise<boolean>;
 }
 
 function isDefaultEnabled(item: WorkItem, params: ApartmentParams): boolean {
   return item.enabledByDefault && (!item.secondaryOnly || params.propertyType === 'secondary');
 }
 
-export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProps) {
+export function EstimateSection({ priceList, lang, contacts, onBook, onSaveEstimate }: EstimateSectionProps) {
   const copy = COPY[lang];
   const [params, setParams] = useState<ApartmentParams>(DEFAULT_APARTMENT);
   const [enabledOverride, setEnabledOverride] = useState<Record<string, boolean>>({});
@@ -150,6 +177,27 @@ export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProp
   const [previewIdx, setPreviewIdx] = useState<number | null>(null); // null = all done
   const [playing, setPlaying] = useState(false);
   const timer = useRef<number | null>(null);
+  const [flash, setFlash] = useState('');
+
+  // Open a shared or saved estimate from the link (#estimate=CODE).
+  useEffect(() => {
+    const restore = () => {
+      const m = window.location.hash.match(/^#estimate=([A-Za-z0-9_-]+)$/);
+      if (!m) return;
+      const state = decodeEstimate(m[1]);
+      if (!state) return;
+      setParams(state.params);
+      setEnabledOverride(state.enabled);
+      setQtyOverride(state.qty);
+      setFinishes({ ...DEFAULT_FINISHES, ...state.finishes });
+      setAreaText(String(state.params.areaSqm));
+      setPreviewIdx(null);
+      window.setTimeout(() => document.getElementById('estimate')?.scrollIntoView({ block: 'start' }), 50);
+    };
+    restore();
+    window.addEventListener('hashchange', restore);
+    return () => window.removeEventListener('hashchange', restore);
+  }, []);
 
   const update = (patch: Partial<ApartmentParams>) => setParams((p) => clampParams({ ...p, ...patch }));
 
@@ -251,6 +299,47 @@ export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProp
   }, [selections, finishes]);
 
   const setFinish = (group: FinishGroupId, optionId: string) => setFinishes((f) => ({ ...f, [group]: optionId }));
+
+  const showFlash = (msg: string) => {
+    setFlash(msg);
+    window.setTimeout(() => setFlash(''), 2600);
+  };
+
+  const currentCode = () =>
+    encodeEstimate({ params, enabled: enabledOverride, qty: qtyOverride, finishes: chosenFinishes });
+
+  const handlePdf = () => {
+    const ok = openPrintableEstimate({ ...estimate, finishes: chosenFinishes }, contacts, estimateShareUrl(currentCode()));
+    if (!ok) showFlash(copy.popupBlocked);
+  };
+
+  const handleShare = async () => {
+    const url = estimateShareUrl(currentCode());
+    const text = `${copy.shareText}: ${params.rooms}-комн, ${params.areaSqm} м² — ${formatKgs(estimate.totalKgs)}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'READY HOME', text, url });
+        return;
+      } catch {
+        // cancelled or unsupported: fall back to copying the link
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      showFlash(copy.copied);
+    } catch {
+      window.prompt(copy.share, url);
+    }
+  };
+
+  const handleSave = async () => {
+    const ok = await onSaveEstimate({
+      code: currentCode(),
+      label: `${params.rooms}-комн · ${params.areaSqm} м² · ${TIER_LABELS[params.tier].ru}`,
+      totalKgs: estimate.totalKgs,
+    });
+    if (ok) showFlash(copy.saved);
+  };
 
   const handleBook = () => {
     onBook({
@@ -638,6 +727,32 @@ export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProp
                 <span>{copy.book}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {[
+                  { label: copy.pdf, icon: FileDown, onClick: handlePdf },
+                  { label: copy.share, icon: Share2, onClick: () => void handleShare() },
+                  { label: copy.save, icon: Bookmark, onClick: () => void handleSave() },
+                ].map(({ label, icon: Icon, onClick }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={onClick}
+                    disabled={estimate.lines.length === 0}
+                    className="flex flex-col items-center justify-center gap-1 py-2.5 px-2 rounded-xl border border-white/15 hover:border-amber-400 text-slate-100 text-xs font-medium text-center leading-tight disabled:opacity-50 cursor-pointer"
+                  >
+                    <Icon className="w-4 h-4 text-amber-400" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="min-h-5 mt-2 text-xs text-emerald-400 text-center" role="status" aria-live="polite">
+                {flash && (
+                  <span className="inline-flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" /> {flash}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>

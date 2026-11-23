@@ -37,7 +37,7 @@ import { DEFAULT_REVIEWS, DEFAULT_SITE_CONTENT } from './data/defaultContent.ts'
 import { CATEGORY_LABELS, formatKgs, STATUS_LABELS, tLoc, UI_COPY } from './i18n.ts';
 import { apiFetch } from './apiClient.ts';
 import { SmartImage } from './components/SmartImage.tsx';
-import { RenovationStudio3D } from './components/RenovationStudio3D.tsx';
+import { LazyStudio3D } from './components/LazyStudio3D.tsx';
 import { CalculatorSection } from './components/CalculatorSection.tsx';
 import { EstimateSection } from './components/EstimateSection.tsx';
 import { BeforeAfterSlider } from './components/BeforeAfterSlider.tsx';
@@ -183,6 +183,25 @@ export default function App() {
       setCabinetOpen(false);
       setBookingOpen(true);
     }
+  };
+
+  const handleSaveEstimate = async (data: { code: string; label: string; totalKgs: number }): Promise<boolean> => {
+    if (!profile) {
+      setAuthPromptNotice('Войдите или зарегистрируйтесь, чтобы сохранить смету в личный кабинет.');
+      setPendingBookingAfterLogin(false);
+      setCabinetOpen(true);
+      return false;
+    }
+    const res = await apiFetch<{ ok?: boolean; savedEstimates?: ClientProfile['savedEstimates'] }>('/api/account', {
+      method: 'POST',
+      auth: 'client',
+      body: JSON.stringify({ action: 'save-estimate', ...data }),
+    });
+    if (res.ok && res.data.savedEstimates) {
+      setProfile((prev) => (prev ? { ...prev, savedEstimates: res.data.savedEstimates } : prev));
+      return true;
+    }
+    return false;
   };
 
   const handleSave3DPreset = async (cfg: Visual3DConfig): Promise<boolean> => {
@@ -618,7 +637,7 @@ export default function App() {
       </section>
 
       {/* 4. INTERACTIVE 3D VISUAL RENOVATION STUDIO */}
-      <RenovationStudio3D
+      <LazyStudio3D
         lang={lang}
         isLoggedIn={Boolean(profile)}
         onSavePreset={handleSave3DPreset}
@@ -748,7 +767,9 @@ export default function App() {
       <EstimateSection
         priceList={content.priceList}
         lang={lang}
+        contacts={content.contacts}
         onBook={(draft) => requestBooking(draft)}
+        onSaveEstimate={handleSaveEstimate}
       />
 
       {/* 7. BEFORE / AFTER GALLERY */}
