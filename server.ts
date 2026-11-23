@@ -25,7 +25,7 @@ import type {
   SiteContent,
   Visual3DConfig,
 } from './src/types.ts';
-import type { FinishGroupConfig, FinishOptionConfig, ReviewItem, WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
+import type { ApartmentLayout, FinishGroupConfig, FinishOptionConfig, ReviewItem, WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
 import { calculateRenovationEstimate } from './src/data/defaultContent.ts';
 import {
   clampParams,
@@ -111,6 +111,27 @@ function sanitizePriceList(input: unknown[]): WorkItem[] {
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
+
+function sanitizeLayouts(input: unknown[]): ApartmentLayout[] {
+  const out: ApartmentLayout[] = [];
+  for (const [idx, raw] of input.slice(0, 60).entries()) {
+    if (!raw || typeof raw !== 'object') continue;
+    const l = raw as Partial<ApartmentLayout>;
+    const id = /^[A-Za-z0-9_-]{1,40}$/.test(String(l.id)) ? String(l.id) : `lay-${Date.now()}-${idx}`;
+    const photo = sanitizeUrl(l.planImage, '');
+    out.push({
+      id,
+      series: clampStr(l.series, 80) || 'Планировка',
+      rooms: Math.max(1, Math.min(5, Math.round(Number(l.rooms) || 1))),
+      areaSqm: Math.max(18, Math.min(400, Math.round((Number(l.areaSqm) || 40) * 10) / 10)),
+      ceilingHeight: Math.max(2.4, Math.min(4, Math.round((Number(l.ceilingHeight) || 2.7) * 100) / 100)),
+      bathrooms: Math.max(1, Math.min(3, Math.round(Number(l.bathrooms) || 1))),
+      propertyType: l.propertyType === 'secondary' ? 'secondary' : 'newbuild',
+      planImage: photo || undefined,
+    });
+  }
+  return out;
+}
 
 function withRuFallback(name: LocalizedText): LocalizedText {
   return { ru: name.ru, ky: name.ky || name.ru, en: name.en || name.ru };
@@ -362,6 +383,7 @@ export function createApp() {
       finishCatalog: Array.isArray(body.finishCatalog)
         ? sanitizeFinishCatalog(body.finishCatalog, cur.finishCatalog)
         : cur.finishCatalog,
+      layouts: Array.isArray(body.layouts) ? sanitizeLayouts(body.layouts) : cur.layouts,
       installment: body.installment && typeof body.installment === 'object'
         ? {
             enabled: Boolean(body.installment.enabled),

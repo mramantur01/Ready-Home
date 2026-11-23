@@ -119,6 +119,25 @@ export interface SiteContent {
   priceList: WorkItem[];
   finishCatalog: FinishGroupConfig[];
   installment: InstallmentConfig;
+  layouts: ApartmentLayout[]; // the studio's own layouts (ЖК plans), shown before the typical series
+}
+
+export interface LayoutSpace {
+  kind: 'living' | 'kitchen' | 'bath';
+  area: number;
+}
+
+// A floor plan the client can start from: a typical Bishkek series or a specific complex.
+export interface ApartmentLayout {
+  id: string;
+  series: string; // e.g. "106 серия" or "ЖК Авангард Сити"
+  rooms: number;
+  areaSqm: number;
+  ceilingHeight: number;
+  bathrooms: number;
+  propertyType: PropertyType;
+  spaces?: LayoutSpace[]; // for the schematic plan; hallway is the remainder
+  planImage?: string; // photo/scan of the real plan
 }
 
 // Instalment offer shown under the estimate (switched on by the studio once a bank partner is set).
@@ -206,6 +225,7 @@ export interface ApartmentParams {
   bathrooms: number;
   propertyType: PropertyType;
   tier: MaterialTier;
+  layout?: string; // chosen layout, e.g. "106 серия, 2-комн, 56 м²"
 }
 
 export interface WorkSelection {

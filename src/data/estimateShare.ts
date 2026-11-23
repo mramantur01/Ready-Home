@@ -31,7 +31,7 @@ export function encodeEstimate(state: EstimateState): string {
   const p = state.params;
   const compact = {
     v: 1,
-    p: [p.rooms, p.areaSqm, p.ceilingHeight, p.bathrooms, p.propertyType === 'secondary' ? 1 : 0, TIERS.indexOf(p.tier)],
+    p: [p.rooms, p.areaSqm, p.ceilingHeight, p.bathrooms, p.propertyType === 'secondary' ? 1 : 0, TIERS.indexOf(p.tier), p.layout || ''],
     e: Object.fromEntries(Object.entries(state.enabled).map(([k, v]) => [k, v ? 1 : 0])),
     q: state.qty,
     f: state.finishes,
@@ -56,6 +56,7 @@ export function decodeEstimate(code: string): EstimateState | null {
       bathrooms: Number(p[3]),
       propertyType: p[4] === 1 ? 'secondary' : 'newbuild',
       tier: TIERS[Number(p[5])] || 'comfort',
+      layout: typeof p[6] === 'string' ? p[6] : undefined,
     });
     const idOk = (k: string) => /^[A-Za-z0-9_-]{1,40}$/.test(k);
     const enabled: Record<string, boolean> = {};

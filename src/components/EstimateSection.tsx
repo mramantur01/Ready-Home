@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, Bookmark, Check, ChevronDown, ClipboardList, FileDown, Pause, Play, RotateCcw, Share2 } from 'lucide-react';
 import type {
+  ApartmentLayout,
   ApartmentParams,
   BookingDraft,
   ContactsConfig,
@@ -25,6 +26,8 @@ import {
 import { formatKgs, TIER_LABELS, tLoc } from '../i18n.ts';
 import { StageVisual } from './StageVisual.tsx';
 import { PaymentPlan } from './PaymentPlan.tsx';
+import { LayoutPicker } from './LayoutPicker.tsx';
+import { layoutTitle, TYPICAL_LAYOUTS } from '../data/layoutCatalog.ts';
 import { decodeEstimate, encodeEstimate, estimateShareUrl } from '../data/estimateShare.ts';
 import { openPrintableEstimate } from '../data/estimatePrint.ts';
 import { defaultFinishes, findFinish, groupByItem, type FinishGroup } from '../data/finishCatalog.ts';
@@ -159,6 +162,7 @@ interface EstimateSectionProps {
   priceList: WorkItem[];
   finishCatalog: FinishGroup[];
   installment: InstallmentConfig;
+  layouts: ApartmentLayout[];
   lang: Lang;
   contacts: ContactsConfig;
   onBook: (draft: BookingDraft) => void;
@@ -174,6 +178,7 @@ export function EstimateSection({
   priceList,
   finishCatalog,
   installment,
+  layouts,
   lang,
   contacts,
   onBook,
@@ -214,7 +219,31 @@ export function EstimateSection({
     return () => window.removeEventListener('hashchange', restore);
   }, []);
 
-  const update = (patch: Partial<ApartmentParams>) => setParams((p) => clampParams({ ...p, ...patch }));
+  const [layoutId, setLayoutId] = useState<string | null>(null);
+  const allLayouts = useMemo(() => [...layouts, ...TYPICAL_LAYOUTS], [layouts]);
+
+  // Manual changes to the apartment mean it no longer matches the picked layout exactly.
+  const update = (patch: Partial<ApartmentParams>) => {
+    const shape = 'areaSqm' in patch || 'rooms' in patch || 'ceilingHeight' in patch || 'bathrooms' in patch;
+    if (shape) setLayoutId(null);
+    setParams((p) => clampParams({ ...p, ...patch, layout: shape ? undefined : p.layout }));
+  };
+
+  const pickLayout = (l: ApartmentLayout) => {
+    setLayoutId(l.id);
+    setQtyOverride({});
+    setParams((p) =>
+      clampParams({
+        ...p,
+        rooms: l.rooms,
+        areaSqm: l.areaSqm,
+        ceilingHeight: l.ceilingHeight,
+        bathrooms: l.bathrooms,
+        propertyType: l.propertyType === 'secondary' ? 'secondary' : 'newbuild',
+        layout: layoutTitle(l),
+      }),
+    );
+  };
 
   const quantities = useMemo(() => computeQuantities(params), [params]);
 
@@ -438,6 +467,10 @@ export function EstimateSection({
               </div>
 
               <div>
+                <LayoutPicker layouts={allLayouts} rooms={params.rooms} selectedId={layoutId} lang={lang} onPick={pickLayout} />
+              </div>
+
+              <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-sm font-semibold text-slate-900 dark:text-white">{copy.area}</span>
                   <label className="inline-flex items-center gap-1.5">
@@ -475,7 +508,7 @@ export function EstimateSection({
                 <div>
                   <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">{copy.ceiling}</div>
                   <div className="flex flex-wrap gap-2">
-                    {[2.5, 2.7, 3.0, 3.3].map((h) => (
+                    {[2.5, 2.7, 2.8, 3.0, 3.3].map((h) => (
                       <button key={h} type="button" onClick={() => update({ ceilingHeight: h })} className={chip(params.ceilingHeight === h)}>
                         {h.toFixed(1)} м
                       </button>

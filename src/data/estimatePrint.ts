@@ -83,6 +83,7 @@ export function buildEstimateHtml(
 </div>
 <div class="params">
   <div><b>${p.rooms}-комнатная</b>, ${p.areaSqm} м²</div>
+  ${p.layout ? `<div>Планировка: ${esc(p.layout)}</div>` : ''}
   <div>Потолки: ${p.ceilingHeight} м</div>
   <div>Санузлов: ${p.bathrooms}</div>
   <div>${p.propertyType === 'secondary' ? 'Вторичное жильё' : 'Новостройка (ПСО)'}</div>

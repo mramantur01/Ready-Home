@@ -21,6 +21,7 @@ import { apiFetch, setAdminToken } from '../apiClient.ts';
 import { PriceListEditor } from './PriceListEditor.tsx';
 import { findFinish } from '../data/finishCatalog.ts';
 import { FinishCatalogEditor } from './FinishCatalogEditor.tsx';
+import { LayoutsEditor } from './LayoutsEditor.tsx';
 import { ASSET_IMAGES } from '../data/defaultContent.ts';
 
 interface AdminPanelModalProps {
@@ -40,6 +41,7 @@ type AdminTab =
   | 'services'
   | 'pricelist'
   | 'finishes'
+  | 'layouts'
   | 'portfolio'
   | 'reviews'
   | 'contacts'
@@ -410,6 +412,7 @@ export function AdminPanelModal({
                   ['services', 'Цены и услуги'],
                   ['pricelist', 'Прайс-лист работ'],
                   ['finishes', 'Каталог отделки'],
+                  ['layouts', 'Планировки ЖК'],
                   ['promos', 'Акции и скидки'],
                   ['masters', 'Мастера'],
                   ['portfolio', 'До/После и IG'],
@@ -788,6 +791,10 @@ export function AdminPanelModal({
                     </div>
                   ))}
                 </div>
+              )}
+
+              {activeTab === 'layouts' && (
+                <LayoutsEditor layouts={draft.layouts} onChange={(layouts) => setDraft({ ...draft, layouts })} />
               )}
 
               {activeTab === 'finishes' && (

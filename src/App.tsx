@@ -768,6 +768,7 @@ export default function App() {
         priceList={content.priceList}
         finishCatalog={content.finishCatalog}
         installment={content.installment}
+        layouts={content.layouts}
         lang={lang}
         contacts={content.contacts}
         onBook={(draft) => requestBooking(draft)}

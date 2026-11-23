@@ -300,6 +300,7 @@ export function clampParams(p: Partial<ApartmentParams>): ApartmentParams {
     bathrooms: Math.max(1, Math.min(3, Math.round(num(p.bathrooms, DEFAULT_APARTMENT.bathrooms)))),
     propertyType: p.propertyType === 'secondary' ? 'secondary' : 'newbuild',
     tier: p.tier === 'standard' || p.tier === 'premium' ? p.tier : 'comfort',
+    layout: typeof p.layout === 'string' && p.layout.trim() ? p.layout.replace(/[<>]/g, '').slice(0, 120) : undefined,
   };
 }
 
@@ -421,7 +422,9 @@ export function computeWorkEstimate(
 export function formatWorkEstimateText(est: WorkEstimate, groups: FinishGroup[] = FINISH_GROUPS): string {
   const kgs = (n: number) => `${n.toLocaleString('ru-RU')} сом`;
   const p = est.params;
-  const head = `Смета по работам: ${p.rooms}-комн, ${p.areaSqm} м², потолки ${p.ceilingHeight} м, санузлов ${p.bathrooms}, класс ${p.tier}`;
+  const head =
+    `Смета по работам: ${p.rooms}-комн, ${p.areaSqm} м², потолки ${p.ceilingHeight} м, санузлов ${p.bathrooms}, класс ${p.tier}` +
+    (p.layout ? `\nПланировка: ${p.layout}` : '');
   const stages = est.stages
     .map((s) => `• ${WORK_STAGES.find((w) => w.id === s.id)?.name.ru || s.id}: ${kgs(s.totalKgs)}`)
     .join('\n');

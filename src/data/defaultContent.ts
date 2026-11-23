@@ -545,6 +545,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     markupPercent: 0,
     note: '',
   },
+  layouts: [],
 };
 
 export const DEFAULT_REVIEWS: ReviewItem[] = [
