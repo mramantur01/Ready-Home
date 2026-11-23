@@ -18,6 +18,7 @@ import type {
 } from '../types.ts';
 import { formatKgs, STATUS_LABELS } from '../i18n.ts';
 import { apiFetch, setAdminToken } from '../apiClient.ts';
+import { PriceListEditor } from './PriceListEditor.tsx';
 import { ASSET_IMAGES } from '../data/defaultContent.ts';
 
 interface AdminPanelModalProps {
@@ -35,6 +36,7 @@ type AdminTab =
   | 'promos'
   | 'masters'
   | 'services'
+  | 'pricelist'
   | 'portfolio'
   | 'reviews'
   | 'contacts'
@@ -381,6 +383,7 @@ export function AdminPanelModal({
                   ['crm', 'Заказы (CRM)'],
                   ['site', 'Баннер и строка'],
                   ['services', 'Цены и услуги'],
+                  ['pricelist', 'Прайс-лист работ'],
                   ['promos', 'Акции и скидки'],
                   ['masters', 'Мастера'],
                   ['portfolio', 'До/После и IG'],
@@ -491,6 +494,22 @@ export function AdminPanelModal({
                               <div className="text-xs text-amber-600 dark:text-amber-400">
                                 3D-проект: {b.visual3D.roomType} / {b.visual3D.wallFinish} / {b.visual3D.floorFinish}
                               </div>
+                            )}
+                            {b.workEstimate && (
+                              <details className="text-xs text-slate-600 dark:text-slate-300 pt-1">
+                                <summary className="cursor-pointer text-amber-600 dark:text-amber-400 font-medium">
+                                  Смета по работам: {b.workEstimate.params.rooms}-комн, {b.workEstimate.params.areaSqm} м² ·{' '}
+                                  {formatKgs(b.workEstimate.totalKgs)}
+                                </summary>
+                                <ul className="mt-1.5 space-y-0.5 tabular-nums">
+                                  {b.workEstimate.lines.map((l) => (
+                                    <li key={l.id}>
+                                      {l.name}: {l.qty} {l.unit === 'm2' ? 'м²' : l.unit === 'm' ? 'м' : 'шт'} —{' '}
+                                      {formatKgs(l.workKgs + l.materialsKgs)}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
                             )}
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
@@ -730,6 +749,13 @@ export function AdminPanelModal({
                     </div>
                   ))}
                 </div>
+              )}
+
+              {activeTab === 'pricelist' && (
+                <PriceListEditor
+                  items={draft.priceList}
+                  onChange={(priceList) => setDraft({ ...draft, priceList })}
+                />
               )}
 
               {/* 4. PROMOS */}

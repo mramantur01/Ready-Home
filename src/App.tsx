@@ -39,6 +39,7 @@ import { apiFetch } from './apiClient.ts';
 import { SmartImage } from './components/SmartImage.tsx';
 import { RenovationStudio3D } from './components/RenovationStudio3D.tsx';
 import { CalculatorSection } from './components/CalculatorSection.tsx';
+import { EstimateSection } from './components/EstimateSection.tsx';
 import { BeforeAfterSlider } from './components/BeforeAfterSlider.tsx';
 import { BookingModal } from './components/BookingModal.tsx';
 import { ClientCabinetModal } from './components/ClientCabinetModal.tsx';
@@ -284,6 +285,9 @@ export default function App() {
             <a href="#calculator" className="hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap shrink-0">
               {copy.nav.calculator}
             </a>
+            <a href="#estimate" className="hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap shrink-0">
+              {copy.nav.estimate}
+            </a>
             <a href="#portfolio" className="hover:text-amber-600 dark:hover:text-amber-400 transition-colors whitespace-nowrap shrink-0">
               {copy.nav.portfolio}
             </a>
@@ -415,6 +419,9 @@ export default function App() {
               </a>
               <a href="#calculator" onClick={() => setMobileMenuOpen(false)} className="py-1.5">
                 {copy.nav.calculator}
+              </a>
+              <a href="#estimate" onClick={() => setMobileMenuOpen(false)} className="py-1.5">
+                {copy.nav.estimate}
               </a>
               <a href="#portfolio" onClick={() => setMobileMenuOpen(false)} className="py-1.5">
                 {copy.nav.portfolio}
@@ -735,6 +742,13 @@ export default function App() {
         services={content.services}
         lang={lang}
         onBookWithParams={(draft) => requestBooking(draft)}
+      />
+
+      {/* 6b. ITEMIZED ESTIMATE BY RENOVATION STAGE */}
+      <EstimateSection
+        priceList={content.priceList}
+        lang={lang}
+        onBook={(draft) => requestBooking(draft)}
       />
 
       {/* 7. BEFORE / AFTER GALLERY */}

@@ -1,0 +1,574 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, ChevronDown, ClipboardList, Pause, Play, RotateCcw } from 'lucide-react';
+import type {
+  ApartmentParams,
+  BookingDraft,
+  Lang,
+  MaterialTier,
+  WorkItem,
+  WorkSelection,
+  WorkStageId,
+} from '../types.ts';
+import {
+  clampParams,
+  computeQuantities,
+  computeWorkEstimate,
+  DEFAULT_APARTMENT,
+  TYPICAL_AREA_BY_ROOMS,
+  WORK_STAGES,
+  WORK_UNIT_LABELS,
+} from '../data/workCatalog.ts';
+import { formatKgs, TIER_LABELS, tLoc } from '../i18n.ts';
+import { StageVisual } from './StageVisual.tsx';
+
+const COPY = {
+  ru: {
+    kicker: 'Смета по каждой работе',
+    title: 'Узнайте цену ремонта по каждому этапу',
+    subtitle:
+      'Укажите параметры квартиры — мы посчитаем объёмы и стоимость каждой работы: штукатурка, шпаклёвка, покраска, плитка, полы, двери и электрика. Отключайте ненужные этапы и правьте объёмы под свою квартиру.',
+    rooms: 'Комнат',
+    area: 'Общая площадь',
+    ceiling: 'Высота потолков',
+    bathrooms: 'Санузлов',
+    property: 'Тип жилья',
+    newbuild: 'Новостройка (ПСО)',
+    secondary: 'Вторичка (со старым ремонтом)',
+    tier: 'Класс материалов',
+    stages: 'Этапы и работы',
+    qty: 'Объём',
+    work: 'Работа',
+    materials: 'Материалы',
+    perUnit: 'за',
+    total: 'Итого по смете',
+    workTotal: 'Работы бригады',
+    materialsTotal: 'Материалы',
+    days: 'Срок',
+    daysUnit: 'дн.',
+    resetQty: 'Сбросить объёмы',
+    preview: 'Как будет выглядеть после этапа',
+    play: 'Показать по шагам',
+    pause: 'Пауза',
+    bare: 'Бетон до ремонта',
+    book: 'Записаться с этой сметой',
+    note: 'Объёмы рассчитаны по типовой планировке. Точная смета фиксируется в договоре после бесплатного замера.',
+    edited: 'изменено',
+  },
+  ky: {
+    kicker: 'Ар бир иштин сметасы',
+    title: 'Ар бир этаптын баасын билиңиз',
+    subtitle:
+      'Батириңиздин параметрлерин көрсөтүңүз — ар бир иштин көлөмүн жана баасын эсептейбиз: шыбоо, шпаклёвка, боёо, плитка, пол, эшиктер жана электр.',
+    rooms: 'Бөлмө',
+    area: 'Жалпы аянт',
+    ceiling: 'Шып бийиктиги',
+    bathrooms: 'Даараткана',
+    property: 'Турак жай түрү',
+    newbuild: 'Жаңы үй (ПСО)',
+    secondary: 'Экинчилик (эски оңдоо)',
+    tier: 'Материалдар классы',
+    stages: 'Этаптар жана иштер',
+    qty: 'Көлөм',
+    work: 'Иш',
+    materials: 'Материал',
+    perUnit: 'үчүн',
+    total: 'Смета боюнча жалпы',
+    workTotal: 'Усталардын иши',
+    materialsTotal: 'Материалдар',
+    days: 'Мөөнөт',
+    daysUnit: 'күн',
+    resetQty: 'Көлөмдөрдү калыбына келтирүү',
+    preview: 'Этаптан кийин кандай болот',
+    play: 'Кадам менен көрсөтүү',
+    pause: 'Тыныгуу',
+    bare: 'Оңдоого чейин бетон',
+    book: 'Ушул смета менен жазылуу',
+    note: 'Көлөмдөр типтүү план боюнча эсептелген. Так смета акысыз өлчөөдөн кийин келишимде бекитилет.',
+    edited: 'өзгөртүлдү',
+  },
+  en: {
+    kicker: 'Itemized estimate',
+    title: 'See the price of every renovation stage',
+    subtitle:
+      'Enter your apartment details and we calculate quantities and cost for each job: plaster, putty, paint, tiles, floors, doors and electrics. Switch off stages you do not need and adjust quantities.',
+    rooms: 'Rooms',
+    area: 'Total area',
+    ceiling: 'Ceiling height',
+    bathrooms: 'Bathrooms',
+    property: 'Housing type',
+    newbuild: 'New build (shell)',
+    secondary: 'Resale (old finish)',
+    tier: 'Material class',
+    stages: 'Stages and jobs',
+    qty: 'Qty',
+    work: 'Labour',
+    materials: 'Materials',
+    perUnit: 'per',
+    total: 'Estimate total',
+    workTotal: 'Crew labour',
+    materialsTotal: 'Materials',
+    days: 'Timeline',
+    daysUnit: 'days',
+    resetQty: 'Reset quantities',
+    preview: 'What it looks like after stage',
+    play: 'Play step by step',
+    pause: 'Pause',
+    bare: 'Bare concrete',
+    book: 'Book with this estimate',
+    note: 'Quantities are based on a typical layout. The final price is fixed in the contract after a free measurement.',
+    edited: 'edited',
+  },
+} as const;
+
+interface EstimateSectionProps {
+  priceList: WorkItem[];
+  lang: Lang;
+  onBook: (draft: BookingDraft) => void;
+}
+
+function isDefaultEnabled(item: WorkItem, params: ApartmentParams): boolean {
+  return item.enabledByDefault && (!item.secondaryOnly || params.propertyType === 'secondary');
+}
+
+export function EstimateSection({ priceList, lang, onBook }: EstimateSectionProps) {
+  const copy = COPY[lang];
+  const [params, setParams] = useState<ApartmentParams>(DEFAULT_APARTMENT);
+  const [enabledOverride, setEnabledOverride] = useState<Record<string, boolean>>({});
+  const [qtyOverride, setQtyOverride] = useState<Record<string, number>>({});
+  const [openStage, setOpenStage] = useState<WorkStageId | null>('walls_finish');
+  const [previewIdx, setPreviewIdx] = useState<number | null>(null); // null = all done
+  const [playing, setPlaying] = useState(false);
+  const timer = useRef<number | null>(null);
+
+  const update = (patch: Partial<ApartmentParams>) => setParams((p) => clampParams({ ...p, ...patch }));
+
+  const quantities = useMemo(() => computeQuantities(params), [params]);
+
+  const isEnabled = (item: WorkItem) => enabledOverride[item.id] ?? isDefaultEnabled(item, params);
+  const qtyOf = (item: WorkItem) => qtyOverride[item.id] ?? quantities[item.basis] ?? 0;
+
+  const selections: WorkSelection[] = useMemo(
+    () => priceList.filter(isEnabled).map((item) => ({ id: item.id, qty: qtyOf(item) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [priceList, enabledOverride, qtyOverride, quantities, params.propertyType],
+  );
+
+  const estimate = useMemo(() => computeWorkEstimate(priceList, params, selections), [priceList, params, selections]);
+  const stageTotals = useMemo(() => new Map(estimate.stages.map((s) => [s.id, s])), [estimate]);
+  const activeStages = WORK_STAGES.filter((s) => stageTotals.has(s.id));
+
+  // Preview: stages up to previewIdx are "done".
+  const shownCount = previewIdx === null ? activeStages.length : previewIdx;
+  const doneStages = useMemo(
+    () => new Set(activeStages.slice(0, shownCount).map((s) => s.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [shownCount, estimate],
+  );
+  const selectedIds = new Set(selections.map((s) => s.id));
+
+  useEffect(() => {
+    if (!playing) return;
+    timer.current = window.setInterval(() => {
+      setPreviewIdx((idx) => {
+        const cur = idx === null ? activeStages.length : idx;
+        if (cur >= activeStages.length) return 0;
+        const next = cur + 1;
+        if (next >= activeStages.length) {
+          setPlaying(false);
+          return null;
+        }
+        return next;
+      });
+    }, 1100);
+    return () => {
+      if (timer.current) window.clearInterval(timer.current);
+    };
+  }, [playing, activeStages.length]);
+
+  const togglePlay = () => {
+    if (playing) {
+      setPlaying(false);
+      return;
+    }
+    setPreviewIdx(0);
+    setPlaying(true);
+  };
+
+  const toggleStage = (stageId: WorkStageId, on: boolean) => {
+    const next = { ...enabledOverride };
+    for (const item of priceList.filter((i) => i.stage === stageId)) {
+      // Turning a stage on restores its default jobs (not mutually exclusive alternatives).
+      next[item.id] = on ? isDefaultEnabled(item, params) || Boolean(enabledOverride[item.id]) : false;
+    }
+    // If a stage has no default jobs, enable its first one so the switch visibly works.
+    if (on && !priceList.some((i) => i.stage === stageId && next[i.id])) {
+      const first = priceList.find((i) => i.stage === stageId);
+      if (first) next[first.id] = true;
+    }
+    setEnabledOverride(next);
+  };
+
+  const toggleItem = (item: WorkItem) => {
+    const on = !isEnabled(item);
+    const next = { ...enabledOverride, [item.id]: on };
+    // Paint vs wallpaper and stretch vs drywall ceiling are alternatives.
+    const alternatives: Record<string, string> = {
+      'w-wall-paint': 'w-wall-wallpaper',
+      'w-wall-wallpaper': 'w-wall-paint',
+      'w-ceiling-stretch': 'w-ceiling-gkl',
+      'w-ceiling-gkl': 'w-ceiling-stretch',
+    };
+    if (on && alternatives[item.id]) next[alternatives[item.id]] = false;
+    setEnabledOverride(next);
+  };
+
+  const hasQtyEdits = Object.keys(qtyOverride).length > 0;
+
+  const handleBook = () => {
+    onBook({
+      propertyType: params.propertyType,
+      areaSqm: params.areaSqm,
+      materialTier: params.tier,
+      roomsCount: `${params.rooms}-комн`,
+      workEstimate: { params, selections, preview: estimate },
+    });
+  };
+
+  const inputCls =
+    'w-full px-3 py-2 rounded-xl bg-white dark:bg-[#16213a] border border-slate-200 dark:border-white/10 text-sm tabular-nums';
+  const chip = (active: boolean) =>
+    `px-3 py-2 rounded-xl text-sm font-medium border transition-colors cursor-pointer ${
+      active
+        ? 'bg-amber-500 text-slate-950 border-amber-500 font-semibold'
+        : 'border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-amber-500/40'
+    }`;
+
+  const previewLabel =
+    shownCount === 0
+      ? copy.bare
+      : tLoc(WORK_STAGES.find((s) => s.id === activeStages[shownCount - 1]?.id)?.name, lang);
+
+  return (
+    <section id="estimate" className="py-16 md:py-24 scroll-mt-20 border-t border-slate-200/80 dark:border-white/5">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mb-10">
+          <p className="text-sm font-medium text-amber-600 dark:text-amber-400 mb-2">{copy.kicker}</p>
+          <h2
+            className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 dark:text-white"
+            style={{ textWrap: 'balance' }}
+          >
+            {copy.title}
+          </h2>
+          <p className="mt-3 text-slate-600 dark:text-slate-300">{copy.subtitle}</p>
+        </div>
+
+        <div className="grid lg:grid-cols-12 gap-6 items-start">
+          {/* Left: apartment parameters + stage list */}
+          <div className="lg:col-span-7 space-y-6 min-w-0">
+            <div className="rounded-3xl bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 p-5 sm:p-7 space-y-5">
+              <div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">{copy.rooms}</div>
+                <div className="flex flex-wrap gap-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => update({ rooms: n, areaSqm: TYPICAL_AREA_BY_ROOMS[n], bathrooms: n >= 3 ? 2 : 1 })}
+                      className={chip(params.rooms === n) + ' min-w-12'}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white">{copy.area}</span>
+                  <span className="text-lg font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                    {params.areaSqm} м²
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={18}
+                  max={250}
+                  step={1}
+                  value={params.areaSqm}
+                  onChange={(e) => update({ areaSqm: Number(e.target.value) })}
+                  className="w-full accent-amber-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">{copy.ceiling}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[2.5, 2.7, 3.0, 3.3].map((h) => (
+                      <button key={h} type="button" onClick={() => update({ ceilingHeight: h })} className={chip(params.ceilingHeight === h)}>
+                        {h.toFixed(1)} м
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">{copy.bathrooms}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[1, 2, 3].map((n) => (
+                      <button key={n} type="button" onClick={() => update({ bathrooms: n })} className={chip(params.bathrooms === n) + ' min-w-12'}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">{copy.property}</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => update({ propertyType: 'newbuild' })} className={chip(params.propertyType === 'newbuild')}>
+                      {copy.newbuild}
+                    </button>
+                    <button type="button" onClick={() => update({ propertyType: 'secondary' })} className={chip(params.propertyType === 'secondary')}>
+                      {copy.secondary}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white mb-2">{copy.tier}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {(['standard', 'comfort', 'premium'] as MaterialTier[]).map((t) => (
+                      <button key={t} type="button" onClick={() => update({ tier: t })} className={chip(params.tier === t)}>
+                        {TIER_LABELS[t][lang]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 overflow-hidden">
+              <div className="flex items-center justify-between gap-3 px-5 sm:px-7 py-4 border-b border-slate-200 dark:border-white/10">
+                <h3 className="font-semibold text-slate-900 dark:text-white inline-flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-amber-500" /> {copy.stages}
+                </h3>
+                {hasQtyEdits && (
+                  <button
+                    type="button"
+                    onClick={() => setQtyOverride({})}
+                    className="text-xs font-medium text-amber-600 dark:text-amber-400 inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> {copy.resetQty}
+                  </button>
+                )}
+              </div>
+
+              <ol className="divide-y divide-slate-200 dark:divide-white/10">
+                {WORK_STAGES.map((stage, idx) => {
+                  const items = priceList.filter((i) => i.stage === stage.id);
+                  if (items.length === 0) return null;
+                  const stageOn = items.some((i) => selectedIds.has(i.id));
+                  const total = stageTotals.get(stage.id)?.totalKgs || 0;
+                  const open = openStage === stage.id;
+                  return (
+                    <li key={stage.id}>
+                      <div className="flex items-center gap-3 px-5 sm:px-7 py-3.5">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={stageOn}
+                          aria-label={tLoc(stage.name, lang)}
+                          onClick={() => toggleStage(stage.id, !stageOn)}
+                          className={`relative w-10 h-6 rounded-full shrink-0 transition-colors cursor-pointer ${
+                            stageOn ? 'bg-amber-500' : 'bg-slate-300 dark:bg-white/15'
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${stageOn ? 'left-[18px]' : 'left-0.5'}`}
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOpenStage(open ? null : stage.id)}
+                          className="flex-1 min-w-0 flex items-center justify-between gap-3 text-left cursor-pointer"
+                          aria-expanded={open}
+                        >
+                          <span className={`text-sm font-semibold ${stageOn ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+                            <span className="text-slate-400 tabular-nums mr-1.5">{idx + 1}.</span>
+                            {tLoc(stage.name, lang)}
+                          </span>
+                          <span className="flex items-center gap-2 shrink-0">
+                            <span className={`text-sm font-bold tabular-nums ${stageOn ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+                              {stageOn ? formatKgs(total) : '—'}
+                            </span>
+                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+                          </span>
+                        </button>
+                      </div>
+
+                      {open && (
+                        <div className="px-5 sm:px-7 pb-4 space-y-2">
+                          {items.map((item) => {
+                            const on = selectedIds.has(item.id);
+                            const qty = qtyOf(item);
+                            const unit = WORK_UNIT_LABELS[item.unit][lang];
+                            const line = estimate.lines.find((l) => l.id === item.id);
+                            const matPrice = item.materialPrice[params.tier] || 0;
+                            return (
+                              <div
+                                key={item.id}
+                                className={`rounded-2xl border p-3 grid grid-cols-12 gap-2 items-center ${
+                                  on
+                                    ? 'border-amber-500/40 bg-amber-500/5'
+                                    : 'border-slate-200 dark:border-white/10 opacity-70'
+                                }`}
+                              >
+                                <label className="col-span-12 sm:col-span-6 flex items-start gap-2.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={on}
+                                    onChange={() => toggleItem(item)}
+                                    className="mt-0.5 w-4 h-4 accent-amber-500 shrink-0"
+                                  />
+                                  <span className="text-sm leading-snug text-slate-800 dark:text-slate-100">
+                                    {tLoc(item.name, lang)}
+                                    <span className="block text-xs text-slate-500 dark:text-slate-400 tabular-nums mt-0.5">
+                                      {copy.work} {formatKgs(item.workPrice)}
+                                      {matPrice > 0 && ` + ${copy.materials.toLowerCase()} ${formatKgs(matPrice)}`} {copy.perUnit} {unit}
+                                    </span>
+                                  </span>
+                                </label>
+                                <div className="col-span-6 sm:col-span-3 flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={item.unit === 'pcs' ? 1 : 0.5}
+                                    value={qty}
+                                    disabled={!on}
+                                    aria-label={`${copy.qty}: ${tLoc(item.name, lang)}`}
+                                    onChange={(e) =>
+                                      setQtyOverride({ ...qtyOverride, [item.id]: Math.max(0, Number(e.target.value) || 0) })
+                                    }
+                                    className={inputCls + ' !py-1.5 !px-2 w-20'}
+                                  />
+                                  <span className="text-xs text-slate-500">{unit}</span>
+                                  {qtyOverride[item.id] !== undefined && (
+                                    <span className="text-[10px] text-amber-600 dark:text-amber-400">{copy.edited}</span>
+                                  )}
+                                </div>
+                                <div className="col-span-6 sm:col-span-3 text-right text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
+                                  {on && line ? formatKgs(line.workKgs + line.materialsKgs) : '—'}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          </div>
+
+          {/* Right: visual preview + totals */}
+          <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
+            <div className="rounded-3xl bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 p-4 sm:p-5">
+              <StageVisual
+                doneStages={doneStages}
+                wallpaper={selectedIds.has('w-wall-wallpaper')}
+                gklCeiling={selectedIds.has('w-ceiling-gkl')}
+                tier={params.tier}
+              />
+              <div className="mt-4">
+                <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <span>{copy.preview}:</span>
+                  <button
+                    type="button"
+                    onClick={togglePlay}
+                    className="inline-flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400 cursor-pointer"
+                  >
+                    {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                    {playing ? copy.pause : copy.play}
+                  </button>
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white min-h-5">{previewLabel}</div>
+                <input
+                  type="range"
+                  min={0}
+                  max={activeStages.length}
+                  value={shownCount}
+                  onChange={(e) => {
+                    setPlaying(false);
+                    const v = Number(e.target.value);
+                    setPreviewIdx(v >= activeStages.length ? null : v);
+                  }}
+                  aria-label={copy.preview}
+                  className="w-full accent-amber-500 cursor-pointer mt-2"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-3xl bg-slate-900 dark:bg-[#0e172a] text-white border border-slate-800 dark:border-amber-500/25 p-5 sm:p-6">
+              <div className="space-y-2 text-sm">
+                {estimate.stages.map((s) => {
+                  const pct = estimate.totalKgs ? Math.round((s.totalKgs / estimate.totalKgs) * 100) : 0;
+                  return (
+                    <div key={s.id}>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-slate-300 truncate">{tLoc(WORK_STAGES.find((w) => w.id === s.id)?.name, lang)}</span>
+                        <span className="font-semibold tabular-nums">{formatKgs(s.totalKgs)}</span>
+                      </div>
+                      <div className="h-1 rounded-full bg-white/10 mt-1">
+                        <div className="h-1 rounded-full bg-amber-500" style={{ width: `${Math.max(2, pct)}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-5 pt-4 border-t border-white/10 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">{copy.workTotal}</span>
+                  <span className="font-semibold tabular-nums">{formatKgs(estimate.workKgs)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">{copy.materialsTotal}</span>
+                  <span className="font-semibold tabular-nums">{formatKgs(estimate.materialsKgs)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">{copy.days}</span>
+                  <span className="font-semibold tabular-nums">
+                    ~{estimate.days} {copy.daysUnit}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <div className="text-xs text-slate-400">{copy.total}</div>
+                <div className="mt-1 text-3xl font-extrabold tracking-tight text-amber-400 tabular-nums">
+                  {formatKgs(estimate.totalKgs)}
+                </div>
+                <div className="text-xs text-slate-400 tabular-nums mt-1">
+                  ≈ {formatKgs(Math.round(estimate.totalKgs / params.areaSqm))} / м²
+                </div>
+                <p className="mt-2.5 text-xs text-slate-400 leading-relaxed">{copy.note}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleBook}
+                disabled={estimate.lines.length === 0}
+                className="mt-5 w-full inline-flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold text-sm transition-colors cursor-pointer"
+              >
+                <span>{copy.book}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}

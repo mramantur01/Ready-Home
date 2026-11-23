@@ -1,4 +1,5 @@
 import type { PropertyType, MaterialTier, SiteContent, ReviewItem, Visual3DConfig } from '../types.ts';
+import { DEFAULT_PRICE_LIST } from './workCatalog.ts';
 
 export const ASSET_IMAGES = {
   heroLiving: '/src/assets/images/hero_living_luxury_1795408666796.jpg',
@@ -534,6 +535,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     twoGisUrl: 'https://2gis.kg/bishkek/search/Байтик%20Баатыра%2070',
     yandexMapsUrl: 'https://yandex.com/maps/10309/bishkek/?text=Байтик+Баатыра+70+Бишкек',
   },
+  priceList: DEFAULT_PRICE_LIST,
 };
 
 export const DEFAULT_REVIEWS: ReviewItem[] = [

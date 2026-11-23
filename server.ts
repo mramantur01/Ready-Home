@@ -25,7 +25,15 @@ import type {
   SiteContent,
   Visual3DConfig,
 } from './src/types.ts';
+import type { WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
 import { calculateRenovationEstimate } from './src/data/defaultContent.ts';
+import {
+  clampParams,
+  computeWorkEstimate,
+  formatWorkEstimateText,
+  WORK_BASIS_LABELS,
+  WORK_STAGES,
+} from './src/data/workCatalog.ts';
 
 const CLIENT_COOKIE = 'rh_client_session';
 const ADMIN_COOKIE = 'rh_admin_session';
@@ -62,6 +70,43 @@ async function sendTelegramNotification(text: string): Promise<{ sent: boolean; 
   } catch {
     return { sent: false, reason: 'network_error' };
   }
+}
+
+const STAGE_IDS = new Set<WorkStageId>(WORK_STAGES.map((s) => s.id));
+const BASIS_IDS = new Set<WorkBasis>(Object.keys(WORK_BASIS_LABELS) as WorkBasis[]);
+const UNIT_IDS = new Set<WorkUnit>(['m2', 'm', 'pcs']);
+
+function sanitizePrice(v: unknown): number {
+  return Math.max(0, Math.min(1_000_000, Math.round(Number(v) || 0)));
+}
+
+function sanitizePriceList(input: unknown[]): WorkItem[] {
+  const seen = new Set<string>();
+  const out: WorkItem[] = [];
+  for (const [idx, raw] of input.slice(0, 120).entries()) {
+    if (!raw || typeof raw !== 'object') continue;
+    const it = raw as Partial<WorkItem>;
+    const id = clampStr(it.id, 40) || `w-${Date.now()}-${idx}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const mat = (it.materialPrice || {}) as Partial<Record<MaterialTier, unknown>>;
+    out.push({
+      id,
+      stage: STAGE_IDS.has(it.stage as WorkStageId) ? (it.stage as WorkStageId) : 'walls_finish',
+      name: sanitizeLoc(it.name, { ru: 'Работа', ky: 'Иш', en: 'Work item' }, 160),
+      unit: UNIT_IDS.has(it.unit as WorkUnit) ? (it.unit as WorkUnit) : 'm2',
+      basis: BASIS_IDS.has(it.basis as WorkBasis) ? (it.basis as WorkBasis) : 'floor',
+      workPrice: sanitizePrice(it.workPrice),
+      materialPrice: {
+        standard: sanitizePrice(mat.standard),
+        comfort: sanitizePrice(mat.comfort),
+        premium: sanitizePrice(mat.premium),
+      },
+      enabledByDefault: Boolean(it.enabledByDefault),
+      secondaryOnly: Boolean(it.secondaryOnly) || undefined,
+    });
+  }
+  return out;
 }
 
 function generateBookingCode(existingIds: Set<string>): string {
@@ -273,6 +318,9 @@ export function createApp() {
             yandexMapsUrl: sanitizeUrl(body.contacts.yandexMapsUrl, cur.contacts.yandexMapsUrl),
           }
         : cur.contacts,
+      priceList: Array.isArray(body.priceList) && body.priceList.length > 0
+        ? sanitizePriceList(body.priceList)
+        : cur.priceList,
     };
 
     db.content = next;
@@ -573,6 +621,21 @@ export function createApp() {
       }
     }
 
+    // Itemized estimate: recompute from the studio's own price list so the client
+    // cannot send arbitrary totals.
+    let workEstimate: WorkEstimate | undefined;
+    const rawWork = req.body?.workEstimate as { params?: unknown; selections?: unknown } | undefined;
+    if (rawWork && typeof rawWork === 'object' && Array.isArray(rawWork.selections)) {
+      const params = clampParams((rawWork.params || {}) as Record<string, never>);
+      const selections: WorkSelection[] = (rawWork.selections as unknown[])
+        .slice(0, 120)
+        .filter((s): s is { id: unknown; qty: unknown } => Boolean(s) && typeof s === 'object')
+        .map((s) => ({ id: clampStr(s.id, 40), qty: Number(s.qty) || 0 }))
+        .filter((s) => s.id);
+      const computed = computeWorkEstimate(db.content.priceList, params, selections);
+      if (computed.lines.length > 0) workEstimate = computed;
+    }
+
     const existingIds = new Set(db.bookings.map((b) => b.id));
     const id = generateBookingCode(existingIds);
 
@@ -597,10 +660,15 @@ export function createApp() {
       needLayoutApproval,
       promoCode: matchedPromo ? matchedPromo.code : undefined,
       comment,
-      totalPriceKgs: visual3D ? Math.max(estimate.totalKgs, visual3D.estimatedPriceKgs) : estimate.totalKgs,
+      totalPriceKgs: workEstimate
+        ? Math.round((workEstimate.totalKgs * (100 - discountPercent)) / 100)
+        : visual3D
+          ? Math.max(estimate.totalKgs, visual3D.estimatedPriceKgs)
+          : estimate.totalKgs,
       status: 'pending',
       createdAt: new Date().toISOString(),
       visual3D,
+      workEstimate,
     };
 
     db.bookings.unshift(record);
@@ -615,6 +683,7 @@ export function createApp() {
       `Дата замера: ${record.date} в ${record.time}`,
       `Оплата: ${record.paymentMethod}`,
       record.visual3D ? `3D-проект: ${record.visual3D.roomType} / ${record.visual3D.stylePreset}` : '',
+      record.workEstimate ? formatWorkEstimateText(record.workEstimate) : '',
       `Оценка: ${record.totalPriceKgs.toLocaleString('ru-RU')} KGS`,
     ]
       .filter(Boolean)

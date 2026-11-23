@@ -58,7 +58,7 @@ export function BookingModal({
   const [complexOrDistrict, setComplexOrDistrict] = useState(BISHKEK_COMPLEXES[0]);
   const [addressDetails, setAddressDetails] = useState('');
   const [areaSqm, setAreaSqm] = useState(draft.areaSqm || draft.visual3D?.areaSqm || 72);
-  const [roomsCount, setRoomsCount] = useState('2-комн');
+  const [roomsCount, setRoomsCount] = useState(draft.roomsCount || '2-комн');
 
   const [serviceId, setServiceId] = useState(draft.serviceId || content.services[0]?.id || '');
   const [materialTier, setMaterialTier] = useState<MaterialTier>(
@@ -91,6 +91,17 @@ export function BookingModal({
   );
 
   const estimate = useMemo(() => {
+    // An itemized estimate from the "Смета по работам" section overrides the per-m² formula.
+    const work = draft.workEstimate?.preview;
+    if (work) {
+      const discount = matchedPromo?.discountPercent || 0;
+      return {
+        workKgs: work.workKgs,
+        materialsKgs: work.materialsKgs,
+        totalKgs: Math.round((work.totalKgs * (100 - discount)) / 100),
+        estimatedDays: work.days,
+      };
+    }
     const base = selectedService?.pricePerSqm || 12500;
     return calculateRenovationEstimate(
       base,
@@ -99,7 +110,7 @@ export function BookingModal({
       materialTier,
       matchedPromo?.discountPercent || 0,
     );
-  }, [selectedService, areaSqm, propertyType, materialTier, matchedPromo]);
+  }, [selectedService, areaSqm, propertyType, materialTier, matchedPromo, draft.workEstimate]);
 
   if (!open) return null;
 
@@ -128,6 +139,9 @@ export function BookingModal({
           promoCode: promoCode.trim(),
           comment,
           visual3D: draft.visual3D,
+          workEstimate: draft.workEstimate
+            ? { params: draft.workEstimate.params, selections: draft.workEstimate.selections }
+            : undefined,
         }),
       },
     );
@@ -257,6 +271,16 @@ export function BookingModal({
                   <div>
                     Прикреплён ваш 3D-проект: <strong>{draft.visual3D.roomType}</strong> · стиль{' '}
                     <strong>{draft.visual3D.stylePreset}</strong> · {draft.visual3D.areaSqm} м²
+                  </div>
+                </div>
+              )}
+              {draft.workEstimate && (
+                <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 flex items-center gap-3 text-xs sm:text-sm text-amber-800 dark:text-amber-200">
+                  <Layers className="w-5 h-5 text-amber-500 shrink-0" />
+                  <div>
+                    Прикреплена смета по работам: <strong>{draft.workEstimate.params.rooms}-комн</strong> ·{' '}
+                    {draft.workEstimate.params.areaSqm} м² · {draft.workEstimate.preview.lines.length} работ ·{' '}
+                    <strong className="tabular-nums">{formatKgs(draft.workEstimate.preview.totalKgs)}</strong>
                   </div>
                 </div>
               )}

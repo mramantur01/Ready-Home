@@ -116,6 +116,93 @@ export interface SiteContent {
   instagramPosts: InstagramPost[];
   faqs: FaqItem[];
   contacts: ContactsConfig;
+  priceList: WorkItem[];
+}
+
+// ------------------------------------------------------------------
+// Itemized renovation estimate ("смета по работам")
+// ------------------------------------------------------------------
+
+export type WorkStageId =
+  | 'demolition'
+  | 'engineering_rough'
+  | 'walls_rough'
+  | 'floor_rough'
+  | 'tiling'
+  | 'walls_finish'
+  | 'ceiling'
+  | 'floor_finish'
+  | 'doors'
+  | 'engineering_finish'
+  | 'cleaning';
+
+export type WorkUnit = 'm2' | 'm' | 'pcs';
+
+// Which apartment measurement drives the quantity of a work item.
+export type WorkBasis =
+  | 'floor' // all floor area
+  | 'dry_floor' // floor without bathrooms
+  | 'ceiling'
+  | 'walls' // all wall area minus openings
+  | 'dry_walls' // walls without tiled areas
+  | 'bath_walls' // tiled bathroom walls
+  | 'bath_floor'
+  | 'kitchen_apron'
+  | 'plinth' // running metres of skirting
+  | 'windows'
+  | 'interior_doors'
+  | 'entrance_door'
+  | 'electric_points'
+  | 'light_points'
+  | 'plumbing_points'
+  | 'plumbing_fixtures'
+  | 'switchboard'
+  | 'debris_trips';
+
+export interface WorkItem {
+  id: string;
+  stage: WorkStageId;
+  name: LocalizedText;
+  unit: WorkUnit;
+  basis: WorkBasis;
+  workPrice: number; // KGS per unit, crew labour
+  materialPrice: Record<MaterialTier, number>; // KGS per unit, by material class
+  enabledByDefault: boolean;
+  secondaryOnly?: boolean; // only pre-selected for secondary housing (old finishes to remove)
+}
+
+export interface ApartmentParams {
+  rooms: number; // 1–5 living rooms
+  areaSqm: number;
+  ceilingHeight: number; // metres
+  bathrooms: number;
+  propertyType: PropertyType;
+  tier: MaterialTier;
+}
+
+export interface WorkSelection {
+  id: string;
+  qty: number;
+}
+
+export interface WorkEstimateLine {
+  id: string;
+  stage: WorkStageId;
+  name: string; // Russian name, frozen at booking time
+  unit: WorkUnit;
+  qty: number;
+  workKgs: number;
+  materialsKgs: number;
+}
+
+export interface WorkEstimate {
+  params: ApartmentParams;
+  lines: WorkEstimateLine[];
+  stages: Array<{ id: WorkStageId; totalKgs: number; days: number }>;
+  workKgs: number;
+  materialsKgs: number;
+  totalKgs: number;
+  days: number;
 }
 
 export type Room3DType = 'living' | 'bedroom' | 'kitchen' | 'bathroom';
@@ -176,6 +263,7 @@ export interface BookingRecord {
   status: BookingStatus;
   createdAt: string;
   visual3D?: Visual3DConfig;
+  workEstimate?: WorkEstimate;
 }
 
 export interface ClientProfile {
@@ -206,4 +294,10 @@ export interface BookingDraft {
   materialTier?: MaterialTier;
   promoCode?: string;
   visual3D?: Visual3DConfig;
+  roomsCount?: string;
+  workEstimate?: {
+    params: ApartmentParams;
+    selections: WorkSelection[];
+    preview: WorkEstimate; // client-side numbers for display; the server recomputes
+  };
 }
