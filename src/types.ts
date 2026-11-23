@@ -330,6 +330,7 @@ export interface BookingRecord {
   createdAt: string;
   visual3D?: Visual3DConfig;
   workEstimate?: WorkEstimate;
+  adminNote?: string; // only in admin API responses
 }
 
 export interface ClientProfile {

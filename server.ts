@@ -646,7 +646,10 @@ export function createApp() {
       return;
     }
     const db = await getDb();
-    const sorted = [...db.bookings].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const notes = db.adminNotes || {};
+    const sorted = [...db.bookings]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((b) => (notes[b.id] ? { ...b, adminNote: notes[b.id] } : b));
     res.json({ bookings: sorted });
   });
 
@@ -815,9 +818,10 @@ export function createApp() {
       res.status(401).json({ error: 'Доступ только для администратора.' });
       return;
     }
+    // Any of: status, foreman (masterId), internal note.
     const id = clampStr(req.body?.id, 24);
-    const status = req.body?.status as BookingStatus;
-    if (!id || !VALID_STATUSES.includes(status)) {
+    const status = req.body?.status as BookingStatus | undefined;
+    if (!id || (status !== undefined && !VALID_STATUSES.includes(status))) {
       res.status(400).json({ error: 'Некорректный ID или статус заявки.' });
       return;
     }
@@ -827,9 +831,23 @@ export function createApp() {
       res.status(404).json({ error: 'Заявка не найдена.' });
       return;
     }
-    target.status = status;
+    if (status) target.status = status;
+    if (typeof req.body?.masterId === 'string') {
+      const master = db.content.masters.find((m) => m.id === req.body.masterId);
+      if (master) {
+        target.masterId = master.id;
+        target.masterName = master.name;
+      }
+    }
+    if (typeof req.body?.note === 'string') {
+      db.adminNotes = db.adminNotes || {};
+      const note = clampStr(req.body.note, 2000);
+      if (note) db.adminNotes[id] = note;
+      else delete db.adminNotes[id];
+    }
     await saveDb(db);
-    res.json({ ok: true, booking: target });
+    const note = db.adminNotes?.[id];
+    res.json({ ok: true, booking: note ? { ...target, adminNote: note } : target });
   });
 
   // ------------------------------------------------------------------

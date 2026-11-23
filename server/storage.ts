@@ -13,6 +13,7 @@ export interface DatabaseState {
   clients: Record<string, StoredClientAccount>; // keyed by normalized phone
   reviews: ReviewItem[];
   claimedAdminHash?: string;
+  adminNotes?: Record<string, string>; // booking id → internal note (admin only)
 }
 
 const DATA_DIR = path.resolve(process.cwd(), '.data');
@@ -129,6 +130,7 @@ function normalizeState(raw: Partial<DatabaseState>): DatabaseState {
     clients: raw.clients && typeof raw.clients === 'object' ? raw.clients : {},
     reviews: Array.isArray(raw.reviews) ? raw.reviews : init.reviews,
     claimedAdminHash: typeof raw.claimedAdminHash === 'string' ? raw.claimedAdminHash : undefined,
+    adminNotes: raw.adminNotes && typeof raw.adminNotes === 'object' ? raw.adminNotes : {},
   };
 }
 

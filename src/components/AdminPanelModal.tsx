@@ -23,6 +23,7 @@ import { findFinish } from '../data/finishCatalog.ts';
 import { FinishCatalogEditor } from './FinishCatalogEditor.tsx';
 import { LayoutsEditor } from './LayoutsEditor.tsx';
 import { StatsPanel } from './StatsPanel.tsx';
+import { openContract } from '../data/contractPrint.ts';
 import { ASSET_IMAGES } from '../data/defaultContent.ts';
 
 interface AdminPanelModalProps {
@@ -199,6 +200,19 @@ export function AdminPanelModal({
     }
     onContentSaved(res.data);
     showToast('Изменения сохранены и сразу видны на сайте.');
+  };
+
+  const handleBookingPatch = async (id: string, change: { masterId?: string; note?: string }, okMsg: string) => {
+    const res = await apiFetch<{ ok?: boolean; booking?: BookingRecord }>('/api/bookings', {
+      method: 'PATCH',
+      auth: 'admin',
+      body: JSON.stringify({ id, ...change }),
+    });
+    if (res.ok && res.data.booking) {
+      const updated = res.data.booking;
+      setBookings((prev) => prev.map((b) => (b.id === id ? updated : b)));
+      showToast(okMsg);
+    }
   };
 
   const handleStatusUpdate = async (id: string, status: BookingStatus) => {
@@ -527,6 +541,17 @@ export function AdminPanelModal({
                                 3D-проект: {b.visual3D.roomType} / {b.visual3D.wallFinish} / {b.visual3D.floorFinish}
                               </div>
                             )}
+                            <textarea
+                              defaultValue={b.adminNote || ''}
+                              placeholder="Заметка для команды (клиент её не видит)"
+                              rows={1}
+                              onBlur={(e) => {
+                                if (e.target.value !== (b.adminNote || '')) {
+                                  void handleBookingPatch(b.id, { note: e.target.value }, 'Заметка сохранена.');
+                                }
+                              }}
+                              className="mt-1.5 w-full max-w-xl px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/15 text-xs text-slate-900 dark:text-white"
+                            />
                             {b.workEstimate && (
                               <details className="text-xs text-slate-600 dark:text-slate-300 pt-1">
                                 <summary className="cursor-pointer text-amber-600 dark:text-amber-400 font-medium">
@@ -557,10 +582,30 @@ export function AdminPanelModal({
                               </details>
                             )}
                           </div>
-                          <div className="flex items-center gap-3 shrink-0">
+                          <div className="flex flex-wrap items-center gap-2 shrink-0 lg:max-w-md lg:justify-end">
                             <span className="font-bold text-sm text-slate-900 dark:text-white tabular-nums">
                               {formatKgs(b.totalPriceKgs)}
                             </span>
+                            <select
+                              value={b.masterId}
+                              onChange={(e) => void handleBookingPatch(b.id, { masterId: e.target.value }, 'Прораб назначен.')}
+                              aria-label="Прораб"
+                              className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/15 text-xs text-slate-900 dark:text-white max-w-40"
+                            >
+                              {!content.masters.some((m) => m.id === b.masterId) && <option value={b.masterId}>{b.masterName}</option>}
+                              {content.masters.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => openContract(b, content)}
+                              className="px-2.5 py-1.5 rounded-lg border border-amber-500/50 text-amber-600 dark:text-amber-400 text-xs font-semibold cursor-pointer"
+                            >
+                              Договор
+                            </button>
                             <select
                               value={b.status}
                               onChange={(e) => void handleStatusUpdate(b.id, e.target.value as BookingStatus)}
