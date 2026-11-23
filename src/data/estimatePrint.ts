@@ -2,7 +2,7 @@
 // Using the browser's own PDF export keeps Cyrillic text perfect without bundling fonts.
 import type { ContactsConfig, WorkEstimate } from '../types.ts';
 import { WORK_STAGES, WORK_UNIT_LABELS } from './workCatalog.ts';
-import { FINISH_GROUPS, findFinish } from './finishCatalog.ts';
+import { FINISH_GROUPS, findFinish, type FinishGroup } from './finishCatalog.ts';
 import { TIER_LABELS } from '../i18n.ts';
 
 const esc = (s: string) =>
@@ -10,7 +10,12 @@ const esc = (s: string) =>
 
 const kgs = (n: number) => `${Math.round(n).toLocaleString('ru-RU')} сом`;
 
-export function buildEstimateHtml(est: WorkEstimate, contacts: ContactsConfig, shareUrl: string): string {
+export function buildEstimateHtml(
+  est: WorkEstimate,
+  contacts: ContactsConfig,
+  shareUrl: string,
+  groups: FinishGroup[] = FINISH_GROUPS,
+): string {
   const p = est.params;
   const date = new Date().toLocaleDateString('ru-RU');
   const stageBlocks = est.stages
@@ -32,9 +37,10 @@ export function buildEstimateHtml(est: WorkEstimate, contacts: ContactsConfig, s
     })
     .join('');
 
-  const finishes = FINISH_GROUPS.filter((g) => est.finishes?.[g.id])
+  const finishes = groups
+    .filter((g) => est.finishes?.[g.id])
     .map((g) => {
-      const op = findFinish(g.id, est.finishes?.[g.id]);
+      const op = findFinish(g.id, est.finishes?.[g.id], groups);
       return `<li><span class="sw" style="background:${esc(op.color)}"></span>${esc(g.label.ru)}: <b>${esc(op.name.ru)}</b></li>`;
     })
     .join('');
@@ -101,8 +107,13 @@ ${finishes ? `<h3 style="margin:16px 0 0;font-size:13px">Выбранная от
 </body></html>`;
 }
 
-export function openPrintableEstimate(est: WorkEstimate, contacts: ContactsConfig, shareUrl: string): boolean {
-  const html = buildEstimateHtml(est, contacts, shareUrl);
+export function openPrintableEstimate(
+  est: WorkEstimate,
+  contacts: ContactsConfig,
+  shareUrl: string,
+  groups: FinishGroup[] = FINISH_GROUPS,
+): boolean {
+  const html = buildEstimateHtml(est, contacts, shareUrl, groups);
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
   const win = window.open(url, '_blank');
   setTimeout(() => URL.revokeObjectURL(url), 60_000);

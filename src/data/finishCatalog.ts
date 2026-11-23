@@ -7,6 +7,8 @@ export interface FinishOption {
   name: LocalizedText;
   color: string; // main swatch colour
   accent?: string; // second colour for patterned finishes (veins, planks, grout)
+  photo?: string; // optional photo of the real material from the showroom
+  surcharge?: number; // extra KGS per unit of the job on top of the material class price
 }
 
 export interface FinishGroup {
@@ -171,27 +173,61 @@ export const FINISH_GROUPS: FinishGroup[] = [
   },
 ];
 
-export const FINISH_GROUP_BY_ITEM: Record<string, FinishGroup> = Object.fromEntries(
-  FINISH_GROUPS.flatMap((g) => g.workItemIds.map((id) => [id, g])),
-);
+// The studio edits the catalog in the admin panel (SiteContent.finishCatalog); every helper
+// takes that catalog and falls back to the built-in defaults above.
+export function groupByItem(groups: FinishGroup[] = FINISH_GROUPS): Record<string, FinishGroup> {
+  return Object.fromEntries(groups.flatMap((g) => g.workItemIds.map((id) => [id, g])));
+}
 
-export const DEFAULT_FINISHES: Required<FinishChoices> = Object.fromEntries(
-  FINISH_GROUPS.map((g) => [g.id, g.options[0].id]),
-) as Required<FinishChoices>;
+export const FINISH_GROUP_BY_ITEM = groupByItem(FINISH_GROUPS);
 
-export function findFinish(group: FinishGroupId, optionId: string | undefined): FinishOption {
-  const g = FINISH_GROUPS.find((x) => x.id === group)!;
-  return g.options.find((op) => op.id === optionId) || g.options[0];
+export function defaultFinishes(groups: FinishGroup[] = FINISH_GROUPS): FinishChoices {
+  return Object.fromEntries(groups.filter((g) => g.options.length).map((g) => [g.id, g.options[0].id]));
+}
+
+export const DEFAULT_FINISHES = defaultFinishes(FINISH_GROUPS);
+
+export function findFinish(
+  group: FinishGroupId,
+  optionId: string | undefined,
+  groups: FinishGroup[] = FINISH_GROUPS,
+): FinishOption {
+  const g = groups.find((x) => x.id === group) || FINISH_GROUPS.find((x) => x.id === group)!;
+  const fallback = FINISH_GROUPS.find((x) => x.id === group)!.options[0];
+  return g.options.find((op) => op.id === optionId) || g.options[0] || fallback;
 }
 
 // Keep only known groups/options (used by the server on bookings).
-export function sanitizeFinishes(input: unknown): FinishChoices {
+export function sanitizeFinishes(input: unknown, groups: FinishGroup[] = FINISH_GROUPS): FinishChoices {
   const out: FinishChoices = {};
   if (!input || typeof input !== 'object') return out;
   const raw = input as Record<string, unknown>;
-  for (const g of FINISH_GROUPS) {
+  for (const g of groups) {
     const v = raw[g.id];
     if (typeof v === 'string' && g.options.some((op) => op.id === v)) out[g.id] = v;
   }
   return out;
+}
+
+// Loose check for links/saved estimates: catalog options can change later, so only the shape is checked.
+export function looseFinishes(input: unknown): FinishChoices {
+  const out: FinishChoices = {};
+  if (!input || typeof input !== 'object') return out;
+  for (const g of FINISH_GROUPS) {
+    const v = (input as Record<string, unknown>)[g.id];
+    if (typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v)) out[g.id] = v;
+  }
+  return out;
+}
+
+// Extra material cost per unit for the chosen option of the job's finish group.
+export function finishSurcharge(
+  workItemId: string,
+  finishes: FinishChoices | undefined,
+  groups: FinishGroup[] = FINISH_GROUPS,
+): number {
+  const g = groups.find((x) => x.workItemIds.includes(workItemId));
+  if (!g || !finishes?.[g.id]) return 0;
+  const op = g.options.find((o) => o.id === finishes[g.id]);
+  return Math.max(0, Number(op?.surcharge) || 0);
 }

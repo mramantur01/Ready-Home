@@ -5,6 +5,7 @@ import type {
   BookingDraft,
   ContactsConfig,
   FinishChoices,
+  InstallmentConfig,
   FinishGroupId,
   Lang,
   MaterialTier,
@@ -23,9 +24,10 @@ import {
 } from '../data/workCatalog.ts';
 import { formatKgs, TIER_LABELS, tLoc } from '../i18n.ts';
 import { StageVisual } from './StageVisual.tsx';
+import { PaymentPlan } from './PaymentPlan.tsx';
 import { decodeEstimate, encodeEstimate, estimateShareUrl } from '../data/estimateShare.ts';
 import { openPrintableEstimate } from '../data/estimatePrint.ts';
-import { DEFAULT_FINISHES, FINISH_GROUPS, FINISH_GROUP_BY_ITEM, findFinish } from '../data/finishCatalog.ts';
+import { defaultFinishes, findFinish, groupByItem, type FinishGroup } from '../data/finishCatalog.ts';
 
 const COPY = {
   ru: {
@@ -155,6 +157,8 @@ const COPY = {
 
 interface EstimateSectionProps {
   priceList: WorkItem[];
+  finishCatalog: FinishGroup[];
+  installment: InstallmentConfig;
   lang: Lang;
   contacts: ContactsConfig;
   onBook: (draft: BookingDraft) => void;
@@ -166,12 +170,23 @@ function isDefaultEnabled(item: WorkItem, params: ApartmentParams): boolean {
   return item.enabledByDefault && (!item.secondaryOnly || params.propertyType === 'secondary');
 }
 
-export function EstimateSection({ priceList, lang, contacts, onBook, onSaveEstimate }: EstimateSectionProps) {
+export function EstimateSection({
+  priceList,
+  finishCatalog,
+  installment,
+  lang,
+  contacts,
+  onBook,
+  onSaveEstimate,
+}: EstimateSectionProps) {
   const copy = COPY[lang];
+  const FINISH_GROUPS = finishCatalog;
+  const FINISH_GROUP_BY_ITEM = useMemo(() => groupByItem(finishCatalog), [finishCatalog]);
+  const DEFAULT_FINISHES = useMemo(() => defaultFinishes(finishCatalog), [finishCatalog]);
   const [params, setParams] = useState<ApartmentParams>(DEFAULT_APARTMENT);
   const [enabledOverride, setEnabledOverride] = useState<Record<string, boolean>>({});
   const [qtyOverride, setQtyOverride] = useState<Record<string, number>>({});
-  const [finishes, setFinishes] = useState<FinishChoices>(DEFAULT_FINISHES);
+  const [finishes, setFinishes] = useState<FinishChoices>(() => defaultFinishes(finishCatalog));
   const [areaText, setAreaText] = useState(String(DEFAULT_APARTMENT.areaSqm));
   const [openStage, setOpenStage] = useState<WorkStageId | null>('walls_finish');
   const [previewIdx, setPreviewIdx] = useState<number | null>(null); // null = all done
@@ -212,7 +227,20 @@ export function EstimateSection({ priceList, lang, contacts, onBook, onSaveEstim
     [priceList, enabledOverride, qtyOverride, quantities, params.propertyType],
   );
 
-  const estimate = useMemo(() => computeWorkEstimate(priceList, params, selections), [priceList, params, selections]);
+  // Colour surcharges depend on the chosen option of each enabled job.
+  const selectedFinishes = useMemo(() => {
+    const out: FinishChoices = {};
+    for (const sel of selections) {
+      const g = groupByItem(finishCatalog)[sel.id];
+      if (g) out[g.id] = finishes[g.id] || g.options[0]?.id;
+    }
+    return out;
+  }, [selections, finishes, finishCatalog]);
+
+  const estimate = useMemo(
+    () => computeWorkEstimate(priceList, params, selections, selectedFinishes, finishCatalog),
+    [priceList, params, selections, selectedFinishes, finishCatalog],
+  );
   const stageTotals = useMemo(() => new Map(estimate.stages.map((s) => [s.id, s])), [estimate]);
   const activeStages = WORK_STAGES.filter((s) => stageTotals.has(s.id));
 
@@ -293,10 +321,10 @@ export function EstimateSection({ priceList, lang, contacts, onBook, onSaveEstim
     const out: FinishChoices = {};
     for (const sel of selections) {
       const g = FINISH_GROUP_BY_ITEM[sel.id];
-      if (g) out[g.id] = finishes[g.id] || g.options[0].id;
+      if (g) out[g.id] = finishes[g.id] || g.options[0]?.id;
     }
     return out;
-  }, [selections, finishes]);
+  }, [selections, finishes, FINISH_GROUP_BY_ITEM]);
 
   const setFinish = (group: FinishGroupId, optionId: string) => setFinishes((f) => ({ ...f, [group]: optionId }));
 
@@ -309,7 +337,12 @@ export function EstimateSection({ priceList, lang, contacts, onBook, onSaveEstim
     encodeEstimate({ params, enabled: enabledOverride, qty: qtyOverride, finishes: chosenFinishes });
 
   const handlePdf = () => {
-    const ok = openPrintableEstimate({ ...estimate, finishes: chosenFinishes }, contacts, estimateShareUrl(currentCode()));
+    const ok = openPrintableEstimate(
+      { ...estimate, finishes: chosenFinishes },
+      contacts,
+      estimateShareUrl(currentCode()),
+      finishCatalog,
+    );
     if (!ok) showFlash(copy.popupBlocked);
   };
 
@@ -600,7 +633,8 @@ export function EstimateSection({ priceList, lang, contacts, onBook, onSaveEstim
                                 </div>
                                 {on && FINISH_GROUP_BY_ITEM[item.id] && (
                                   <FinishPicker
-                                    groupId={FINISH_GROUP_BY_ITEM[item.id].id}
+                                    group={FINISH_GROUP_BY_ITEM[item.id]}
+                                    unit={unit}
                                     value={finishes[FINISH_GROUP_BY_ITEM[item.id].id]}
                                     lang={lang}
                                     onChange={setFinish}
@@ -621,7 +655,12 @@ export function EstimateSection({ priceList, lang, contacts, onBook, onSaveEstim
           {/* Right: visual preview + totals */}
           <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
             <div className="rounded-3xl bg-white dark:bg-[#192540] border border-slate-200 dark:border-white/10 p-4 sm:p-5">
-              <StageVisual doneStages={doneStages} wallpaper={selectedIds.has('w-wall-wallpaper')} finishes={finishes} />
+              <StageVisual
+                doneStages={doneStages}
+                wallpaper={selectedIds.has('w-wall-wallpaper')}
+                finishes={finishes}
+                groups={finishCatalog}
+              />
               <div className="mt-4">
                 <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                   <span>{copy.preview}:</span>
@@ -654,7 +693,7 @@ export function EstimateSection({ priceList, lang, contacts, onBook, onSaveEstim
                   <div className="text-xs font-semibold text-slate-900 dark:text-white mb-2">{copy.yourFinish}</div>
                   <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
                     {FINISH_GROUPS.filter((g) => chosenFinishes[g.id]).map((g) => {
-                      const op = findFinish(g.id, chosenFinishes[g.id]);
+                      const op = findFinish(g.id, chosenFinishes[g.id], finishCatalog);
                       return (
                         <li key={g.id} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 min-w-0">
                           <span
@@ -718,6 +757,8 @@ export function EstimateSection({ priceList, lang, contacts, onBook, onSaveEstim
                 <p className="mt-2.5 text-xs text-slate-400 leading-relaxed">{copy.note}</p>
               </div>
 
+              {estimate.lines.length > 0 && <PaymentPlan estimate={estimate} installment={installment} lang={lang} />}
+
               <button
                 type="button"
                 onClick={handleBook}
@@ -762,19 +803,26 @@ export function EstimateSection({ priceList, lang, contacts, onBook, onSaveEstim
 }
 
 interface FinishPickerProps {
-  groupId: FinishGroupId;
+  group: FinishGroup;
+  unit: string;
   value: string | undefined;
   lang: Lang;
   onChange: (group: FinishGroupId, optionId: string) => void;
 }
 
-function FinishPicker({ groupId, value, lang, onChange }: FinishPickerProps) {
-  const group = FINISH_GROUPS.find((g) => g.id === groupId)!;
-  const current = findFinish(groupId, value);
+function FinishPicker({ group, unit, value, lang, onChange }: FinishPickerProps) {
+  const groupId = group.id;
+  const current = group.options.find((o) => o.id === value) || group.options[0];
+  if (!current) return null;
   return (
     <div className="col-span-12 pt-1">
       <div className="text-xs text-slate-500 dark:text-slate-400 mb-1.5">
         {tLoc(group.label, lang)}: <span className="font-semibold text-slate-800 dark:text-slate-100">{tLoc(current.name, lang)}</span>
+        {current.surcharge ? (
+          <span className="ml-1.5 text-amber-600 dark:text-amber-400 tabular-nums">
+            +{formatKgs(current.surcharge)} / {unit}
+          </span>
+        ) : null}
       </div>
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={tLoc(group.label, lang)}>
         {group.options.map((op) => {
@@ -785,16 +833,24 @@ function FinishPicker({ groupId, value, lang, onChange }: FinishPickerProps) {
               type="button"
               role="radio"
               aria-checked={active}
-              title={tLoc(op.name, lang)}
+              title={tLoc(op.name, lang) + (op.surcharge ? ` (+${formatKgs(op.surcharge)} / ${unit})` : '')}
               aria-label={tLoc(op.name, lang)}
               onClick={() => onChange(groupId, op.id)}
-              className={`w-8 h-8 rounded-full border-2 cursor-pointer transition-transform ${
+              className={`relative ${op.photo ? 'w-11 h-11 rounded-xl' : 'w-8 h-8 rounded-full'} border-2 cursor-pointer transition-transform bg-cover bg-center ${
                 active ? 'border-amber-500 scale-110 ring-2 ring-amber-500/30' : 'border-slate-300 dark:border-white/20 hover:scale-105'
               }`}
               style={{
-                background: op.accent ? `linear-gradient(135deg, ${op.color} 0 55%, ${op.accent} 55% 100%)` : op.color,
+                background: op.photo
+                  ? `center / cover no-repeat url("${op.photo.replace(/"/g, '')}"), ${op.color}`
+                  : op.accent
+                    ? `linear-gradient(135deg, ${op.color} 0 55%, ${op.accent} 55% 100%)`
+                    : op.color,
               }}
-            />
+            >
+              {op.surcharge ? (
+                <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold px-1 rounded bg-amber-500 text-slate-950 leading-tight">+</span>
+              ) : null}
+            </button>
           );
         })}
       </div>

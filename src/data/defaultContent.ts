@@ -1,5 +1,6 @@
 import type { PropertyType, MaterialTier, SiteContent, ReviewItem, Visual3DConfig } from '../types.ts';
 import { DEFAULT_PRICE_LIST } from './workCatalog.ts';
+import { FINISH_GROUPS } from './finishCatalog.ts';
 
 export const ASSET_IMAGES = {
   heroLiving: '/src/assets/images/hero_living_luxury_1795408666796.jpg',
@@ -536,6 +537,14 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     yandexMapsUrl: 'https://yandex.com/maps/10309/bishkek/?text=Байтик+Баатыра+70+Бишкек',
   },
   priceList: DEFAULT_PRICE_LIST,
+  finishCatalog: FINISH_GROUPS,
+  installment: {
+    enabled: false,
+    months: [3, 6, 12],
+    downPaymentPercent: 30,
+    markupPercent: 0,
+    note: '',
+  },
 };
 
 export const DEFAULT_REVIEWS: ReviewItem[] = [

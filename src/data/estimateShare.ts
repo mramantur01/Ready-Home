@@ -2,7 +2,7 @@
 // "share estimate" links (#estimate=CODE) and estimates saved in the cabinet.
 import type { ApartmentParams, FinishChoices, MaterialTier } from '../types.ts';
 import { clampParams } from './workCatalog.ts';
-import { sanitizeFinishes } from './finishCatalog.ts';
+import { looseFinishes } from './finishCatalog.ts';
 
 export interface EstimateState {
   params: ApartmentParams;
@@ -65,7 +65,7 @@ export function decodeEstimate(code: string): EstimateState | null {
       const n = Number(v);
       if (idOk(k) && Number.isFinite(n) && n >= 0 && n <= 5000) qty[k] = n;
     }
-    return { params, enabled, qty, finishes: sanitizeFinishes(raw.f) };
+    return { params, enabled, qty, finishes: looseFinishes(raw.f) };
   } catch {
     return null;
   }

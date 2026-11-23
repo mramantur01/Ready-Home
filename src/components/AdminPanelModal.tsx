@@ -19,7 +19,8 @@ import type {
 import { formatKgs, STATUS_LABELS } from '../i18n.ts';
 import { apiFetch, setAdminToken } from '../apiClient.ts';
 import { PriceListEditor } from './PriceListEditor.tsx';
-import { FINISH_GROUPS, findFinish } from '../data/finishCatalog.ts';
+import { findFinish } from '../data/finishCatalog.ts';
+import { FinishCatalogEditor } from './FinishCatalogEditor.tsx';
 import { ASSET_IMAGES } from '../data/defaultContent.ts';
 
 interface AdminPanelModalProps {
@@ -38,6 +39,7 @@ type AdminTab =
   | 'masters'
   | 'services'
   | 'pricelist'
+  | 'finishes'
   | 'portfolio'
   | 'reviews'
   | 'contacts'
@@ -407,6 +409,7 @@ export function AdminPanelModal({
                   ['site', 'Баннер и строка'],
                   ['services', 'Цены и услуги'],
                   ['pricelist', 'Прайс-лист работ'],
+                  ['finishes', 'Каталог отделки'],
                   ['promos', 'Акции и скидки'],
                   ['masters', 'Мастера'],
                   ['portfolio', 'До/После и IG'],
@@ -534,8 +537,8 @@ export function AdminPanelModal({
                                 </ul>
                                 {b.workEstimate.finishes && Object.keys(b.workEstimate.finishes).length > 0 && (
                                   <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                                    {FINISH_GROUPS.filter((g) => b.workEstimate?.finishes?.[g.id]).map((g) => {
-                                      const op = findFinish(g.id, b.workEstimate?.finishes?.[g.id]);
+                                    {content.finishCatalog.filter((g) => b.workEstimate?.finishes?.[g.id]).map((g) => {
+                                      const op = findFinish(g.id, b.workEstimate?.finishes?.[g.id], content.finishCatalog);
                                       return (
                                         <span key={g.id} className="inline-flex items-center gap-1">
                                           <span className="w-3 h-3 rounded-full border border-slate-300" style={{ background: op.color }} />
@@ -784,6 +787,90 @@ export function AdminPanelModal({
                       </button>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {activeTab === 'finishes' && (
+                <FinishCatalogEditor
+                  groups={draft.finishCatalog}
+                  onChange={(finishCatalog) => setDraft({ ...draft, finishCatalog })}
+                />
+              )}
+
+              {activeTab === 'pricelist' && (
+                <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-4 mb-4 space-y-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.installment.enabled}
+                      onChange={(e) => setDraft({ ...draft, installment: { ...draft.installment, enabled: e.target.checked } })}
+                      className="w-4 h-4 accent-amber-500"
+                    />
+                    Показывать рассрочку в смете
+                  </label>
+                  <div className="grid sm:grid-cols-4 gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <div className="space-y-1 sm:col-span-4">
+                      <span>Сроки рассрочки, мес.</span>
+                      <div className="flex flex-wrap gap-3">
+                        {[3, 6, 9, 12, 18, 24].map((m) => (
+                          <label key={m} className="inline-flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-200 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={draft.installment.months.includes(m)}
+                              onChange={(e) => {
+                                const set = new Set(draft.installment.months);
+                                if (e.target.checked) set.add(m);
+                                else set.delete(m);
+                                setDraft({
+                                  ...draft,
+                                  installment: { ...draft.installment, months: [...set].sort((a, b) => a - b) },
+                                });
+                              }}
+                              className="w-4 h-4 accent-amber-500"
+                            />
+                            {m}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <label className="space-y-1">
+                      <span>Первый взнос, %</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={90}
+                        value={draft.installment.downPaymentPercent}
+                        onChange={(e) =>
+                          setDraft({ ...draft, installment: { ...draft.installment, downPaymentPercent: Number(e.target.value) || 0 } })
+                        }
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#16213a] border border-slate-200 dark:border-white/10 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span>Переплата за весь срок, %</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        value={draft.installment.markupPercent}
+                        onChange={(e) =>
+                          setDraft({ ...draft, installment: { ...draft.installment, markupPercent: Number(e.target.value) || 0 } })
+                        }
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#16213a] border border-slate-200 dark:border-white/10 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span>Подпись (банк, условия)</span>
+                      <input
+                        type="text"
+                        value={draft.installment.note}
+                        placeholder="Рассрочка через банк-партнёр"
+                        onChange={(e) => setDraft({ ...draft, installment: { ...draft.installment, note: e.target.value } })}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#16213a] border border-slate-200 dark:border-white/10 text-sm"
+                      />
+                    </label>
+                  </div>
                 </div>
               )}
 

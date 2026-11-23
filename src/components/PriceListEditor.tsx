@@ -1,6 +1,6 @@
 import { Plus, RotateCcw, Trash2 } from 'lucide-react';
 import type { MaterialTier, WorkBasis, WorkItem, WorkStageId, WorkUnit } from '../types.ts';
-import { DEFAULT_PRICE_LIST, WORK_BASIS_LABELS, WORK_STAGES, WORK_UNIT_LABELS } from '../data/workCatalog.ts';
+import { DEFAULT_PRICE_LIST, renameRu, WORK_BASIS_LABELS, WORK_STAGES, WORK_UNIT_LABELS } from '../data/workCatalog.ts';
 
 interface PriceListEditorProps {
   items: WorkItem[];
@@ -83,7 +83,7 @@ export function PriceListEditor({ items, onChange }: PriceListEditorProps) {
                       <input
                         type="text"
                         value={it.name.ru}
-                        onChange={(e) => patch(it.id, { name: { ...it.name, ru: e.target.value } })}
+                        onChange={(e) => patch(it.id, { name: renameRu(it.name, e.target.value) })}
                         className={field + ' flex-1 min-w-48'}
                         aria-label="Название работы"
                       />

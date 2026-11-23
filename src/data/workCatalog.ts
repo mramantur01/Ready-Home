@@ -3,6 +3,7 @@
 // so it must stay free of React and Node-only imports.
 import type {
   ApartmentParams,
+  FinishChoices,
   LocalizedText,
   MaterialTier,
   WorkBasis,
@@ -13,7 +14,7 @@ import type {
   WorkStageId,
   WorkUnit,
 } from '../types.ts';
-import { FINISH_GROUPS, findFinish } from './finishCatalog.ts';
+import { FINISH_GROUPS, findFinish, finishSurcharge, type FinishGroup } from './finishCatalog.ts';
 
 export interface WorkStageInfo {
   id: WorkStageId;
@@ -271,6 +272,13 @@ export const DEFAULT_PRICE_LIST: WorkItem[] = [
   },
 ];
 
+const NAME_PLACEHOLDERS = new Set(['Жаңы иш', 'New work item', 'Жаңы вариант', 'New option', 'Иш', 'Work item', 'Вариант', 'Option']);
+
+export function renameRu(name: LocalizedText, ru: string): LocalizedText {
+  const follow = (v: string) => !v || v === name.ru || NAME_PLACEHOLDERS.has(v);
+  return { ru, ky: follow(name.ky) ? ru : name.ky, en: follow(name.en) ? ru : name.en };
+}
+
 export const DEFAULT_APARTMENT: ApartmentParams = {
   rooms: 2,
   areaSqm: 64,
@@ -358,6 +366,8 @@ export function computeWorkEstimate(
   priceList: WorkItem[],
   rawParams: ApartmentParams,
   selections: WorkSelection[],
+  finishes?: FinishChoices,
+  finishGroups: FinishGroup[] = FINISH_GROUPS,
 ): WorkEstimate {
   const params = clampParams(rawParams);
   const byId = new Map(priceList.map((i) => [i.id, i]));
@@ -378,7 +388,9 @@ export function computeWorkEstimate(
       unit: item.unit,
       qty,
       workKgs: Math.round(qty * item.workPrice * workMult),
-      materialsKgs: Math.round(qty * (item.materialPrice[params.tier] || 0)),
+      materialsKgs: Math.round(
+        qty * ((item.materialPrice[params.tier] || 0) + finishSurcharge(item.id, finishes, finishGroups)),
+      ),
     });
   }
 
@@ -395,6 +407,7 @@ export function computeWorkEstimate(
 
   return {
     params,
+    finishes,
     lines,
     stages,
     workKgs,
@@ -405,15 +418,16 @@ export function computeWorkEstimate(
 }
 
 // Short plain-text summary (Telegram notification, CRM).
-export function formatWorkEstimateText(est: WorkEstimate): string {
+export function formatWorkEstimateText(est: WorkEstimate, groups: FinishGroup[] = FINISH_GROUPS): string {
   const kgs = (n: number) => `${n.toLocaleString('ru-RU')} сом`;
   const p = est.params;
   const head = `Смета по работам: ${p.rooms}-комн, ${p.areaSqm} м², потолки ${p.ceilingHeight} м, санузлов ${p.bathrooms}, класс ${p.tier}`;
   const stages = est.stages
     .map((s) => `• ${WORK_STAGES.find((w) => w.id === s.id)?.name.ru || s.id}: ${kgs(s.totalKgs)}`)
     .join('\n');
-  const finishes = FINISH_GROUPS.filter((g) => est.finishes?.[g.id])
-    .map((g) => `• ${g.label.ru}: ${findFinish(g.id, est.finishes?.[g.id]).name.ru}`)
+  const finishes = groups
+    .filter((g) => est.finishes?.[g.id])
+    .map((g) => `• ${g.label.ru}: ${findFinish(g.id, est.finishes?.[g.id], groups).name.ru}`)
     .join('\n');
   return (
     `${head}\n${stages}\nРаботы: ${kgs(est.workKgs)}, материалы: ${kgs(est.materialsKgs)}, срок ~${est.days} дн.` +

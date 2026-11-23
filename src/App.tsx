@@ -766,6 +766,8 @@ export default function App() {
       {/* 6b. ITEMIZED ESTIMATE BY RENOVATION STAGE */}
       <EstimateSection
         priceList={content.priceList}
+        finishCatalog={content.finishCatalog}
+        installment={content.installment}
         lang={lang}
         contacts={content.contacts}
         onBook={(draft) => requestBooking(draft)}

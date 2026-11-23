@@ -1,5 +1,5 @@
 import type { FinishChoices, WorkStageId } from '../types.ts';
-import { findFinish } from '../data/finishCatalog.ts';
+import { FINISH_GROUPS, findFinish, type FinishGroup } from '../data/finishCatalog.ts';
 
 // Front view of one apartment room that "builds up" stage by stage:
 // bare concrete → wiring → plaster → screed → tiles → paint → ceiling → floor → doors → fixtures → clean.
@@ -8,21 +8,22 @@ interface StageVisualProps {
   doneStages: Set<WorkStageId>;
   wallpaper: boolean; // wallpaper instead of paint
   finishes: FinishChoices;
+  groups?: FinishGroup[];
 }
 
-export function StageVisual({ doneStages, wallpaper, finishes }: StageVisualProps) {
+export function StageVisual({ doneStages, wallpaper, finishes, groups = FINISH_GROUPS }: StageVisualProps) {
   const has = (s: WorkStageId) => doneStages.has(s);
   const plastered = has('walls_rough');
   const finished = has('walls_finish');
 
-  const paint = findFinish('wall_paint', finishes.wall_paint);
-  const paper = findFinish('wallpaper', finishes.wallpaper);
-  const tile = findFinish('bath_tile', finishes.bath_tile);
-  const lam = findFinish('laminate', finishes.laminate);
-  const ceil = findFinish('ceiling', finishes.ceiling);
-  const door = findFinish('doors', finishes.doors);
-  const plinthOpt = findFinish('plinth', finishes.plinth);
-  const socket = findFinish('sockets', finishes.sockets);
+  const paint = findFinish('wall_paint', finishes.wall_paint, groups);
+  const paper = findFinish('wallpaper', finishes.wallpaper, groups);
+  const tile = findFinish('bath_tile', finishes.bath_tile, groups);
+  const lam = findFinish('laminate', finishes.laminate, groups);
+  const ceil = findFinish('ceiling', finishes.ceiling, groups);
+  const door = findFinish('doors', finishes.doors, groups);
+  const plinthOpt = findFinish('plinth', finishes.plinth, groups);
+  const socket = findFinish('sockets', finishes.sockets, groups);
 
   const wallColor = wallpaper ? paper.color : paint.color;
   const plinthColor =

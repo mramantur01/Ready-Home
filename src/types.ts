@@ -117,6 +117,34 @@ export interface SiteContent {
   faqs: FaqItem[];
   contacts: ContactsConfig;
   priceList: WorkItem[];
+  finishCatalog: FinishGroupConfig[];
+  installment: InstallmentConfig;
+}
+
+// Instalment offer shown under the estimate (switched on by the studio once a bank partner is set).
+export interface InstallmentConfig {
+  enabled: boolean;
+  months: number[]; // e.g. [3, 6, 12]
+  downPaymentPercent: number;
+  markupPercent: number; // total extra cost over the whole term, 0 = interest-free
+  note: string; // e.g. "Рассрочка через MBank, решение за 15 минут"
+}
+
+// Editable colour/material catalog (admin → "Каталог отделки").
+export interface FinishOptionConfig {
+  id: string;
+  name: LocalizedText;
+  color: string;
+  accent?: string;
+  photo?: string;
+  surcharge?: number;
+}
+
+export interface FinishGroupConfig {
+  id: FinishGroupId;
+  label: LocalizedText;
+  workItemIds: string[];
+  options: FinishOptionConfig[];
 }
 
 // ------------------------------------------------------------------

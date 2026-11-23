@@ -25,7 +25,7 @@ import type {
   SiteContent,
   Visual3DConfig,
 } from './src/types.ts';
-import type { ReviewItem, WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
+import type { FinishGroupConfig, FinishOptionConfig, ReviewItem, WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
 import { calculateRenovationEstimate } from './src/data/defaultContent.ts';
 import {
   clampParams,
@@ -94,7 +94,7 @@ function sanitizePriceList(input: unknown[]): WorkItem[] {
     out.push({
       id,
       stage: STAGE_IDS.has(it.stage as WorkStageId) ? (it.stage as WorkStageId) : 'walls_finish',
-      name: sanitizeLoc(it.name, { ru: 'Работа', ky: 'Иш', en: 'Work item' }, 160),
+      name: withRuFallback(sanitizeLoc(it.name, { ru: 'Работа', ky: '', en: '' }, 160)),
       unit: UNIT_IDS.has(it.unit as WorkUnit) ? (it.unit as WorkUnit) : 'm2',
       basis: BASIS_IDS.has(it.basis as WorkBasis) ? (it.basis as WorkBasis) : 'floor',
       workPrice: sanitizePrice(it.workPrice),
@@ -108,6 +108,43 @@ function sanitizePriceList(input: unknown[]): WorkItem[] {
     });
   }
   return out;
+}
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
+function withRuFallback(name: LocalizedText): LocalizedText {
+  return { ru: name.ru, ky: name.ky || name.ru, en: name.en || name.ru };
+}
+
+// Admin-edited colour/material catalog. Groups and the jobs they attach to are fixed by the
+// site; the studio edits the options (name, colour, photo, surcharge).
+function sanitizeFinishCatalog(input: unknown[], current: FinishGroupConfig[]): FinishGroupConfig[] {
+  return FINISH_GROUPS.map((base) => {
+    const raw = input.find((g) => g && typeof g === 'object' && (g as { id?: unknown }).id === base.id) as
+      | Partial<FinishGroupConfig>
+      | undefined;
+    if (!raw || !Array.isArray(raw.options)) {
+      return current.find((g) => g.id === base.id) || base;
+    }
+    const seen = new Set<string>();
+    const options: FinishOptionConfig[] = [];
+    for (const [idx, o] of raw.options.slice(0, 40).entries()) {
+      if (!o || typeof o !== 'object') continue;
+      let id = clampStr(o.id, 40);
+      if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || seen.has(id)) id = `opt-${Date.now()}-${idx}`;
+      seen.add(id);
+      const photo = sanitizeUrl(o.photo, '');
+      options.push({
+        id,
+        name: withRuFallback(sanitizeLoc(o.name, { ru: 'Вариант', ky: '', en: '' }, 80)),
+        color: HEX.test(String(o.color)) ? String(o.color) : '#cccccc',
+        accent: HEX.test(String(o.accent)) ? String(o.accent) : undefined,
+        photo: photo || undefined,
+        surcharge: sanitizePrice(o.surcharge) || undefined,
+      });
+    }
+    return { ...base, options: options.length ? options : base.options };
+  });
 }
 
 function generateBookingCode(existingIds: Set<string>): string {
@@ -322,6 +359,21 @@ export function createApp() {
       priceList: Array.isArray(body.priceList) && body.priceList.length > 0
         ? sanitizePriceList(body.priceList)
         : cur.priceList,
+      finishCatalog: Array.isArray(body.finishCatalog)
+        ? sanitizeFinishCatalog(body.finishCatalog, cur.finishCatalog)
+        : cur.finishCatalog,
+      installment: body.installment && typeof body.installment === 'object'
+        ? {
+            enabled: Boolean(body.installment.enabled),
+            months: (Array.isArray(body.installment.months) ? body.installment.months : [])
+              .map((m: unknown) => Math.round(Number(m)))
+              .filter((m: number) => m >= 1 && m <= 60)
+              .slice(0, 6),
+            downPaymentPercent: Math.max(0, Math.min(90, Math.round(Number(body.installment.downPaymentPercent) || 0))),
+            markupPercent: Math.max(0, Math.min(100, Number(body.installment.markupPercent) || 0)),
+            note: clampStr(body.installment.note, 200),
+          }
+        : cur.installment,
     };
 
     db.content = next;
@@ -665,16 +717,15 @@ export function createApp() {
         .filter((s): s is { id: unknown; qty: unknown } => Boolean(s) && typeof s === 'object')
         .map((s) => ({ id: clampStr(s.id, 40), qty: Number(s.qty) || 0 }))
         .filter((s) => s.id);
-      const computed = computeWorkEstimate(db.content.priceList, params, selections);
-      if (computed.lines.length > 0) {
-        // Keep colour choices only for jobs that are actually in the estimate.
-        const finishes = sanitizeFinishes((rawWork as { finishes?: unknown }).finishes);
-        const lineIds = new Set(computed.lines.map((l) => l.id));
-        for (const g of FINISH_GROUPS) {
-          if (!g.workItemIds.some((id) => lineIds.has(id))) delete finishes[g.id];
-        }
-        workEstimate = { ...computed, finishes };
+      const catalog = db.content.finishCatalog;
+      const finishes = sanitizeFinishes((rawWork as { finishes?: unknown }).finishes, catalog);
+      const selectedIds = new Set(selections.map((x) => x.id));
+      // Keep colour choices only for jobs that are actually in the estimate.
+      for (const g of catalog) {
+        if (!g.workItemIds.some((id) => selectedIds.has(id))) delete finishes[g.id];
       }
+      const computed = computeWorkEstimate(db.content.priceList, params, selections, finishes, catalog);
+      if (computed.lines.length > 0) workEstimate = computed;
     }
 
     const existingIds = new Set(db.bookings.map((b) => b.id));
@@ -724,7 +775,7 @@ export function createApp() {
       `Дата замера: ${record.date} в ${record.time}`,
       `Оплата: ${record.paymentMethod}`,
       record.visual3D ? `3D-проект: ${record.visual3D.roomType} / ${record.visual3D.stylePreset}` : '',
-      record.workEstimate ? formatWorkEstimateText(record.workEstimate) : '',
+      record.workEstimate ? formatWorkEstimateText(record.workEstimate, db.content.finishCatalog) : '',
       `Оценка: ${record.totalPriceKgs.toLocaleString('ru-RU')} KGS`,
     ]
       .filter(Boolean)
