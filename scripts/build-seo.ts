@@ -45,14 +45,14 @@ function estimateLink(l: ApartmentLayout): string {
 }
 
 const CSS = `
-*{box-sizing:border-box}body{margin:0;font-family:"Plus Jakarta Sans",-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#131d33;color:#e2e8f0;line-height:1.6}
+*{box-sizing:border-box}html,body{overflow-x:hidden}body{margin:0;font-family:"Plus Jakarta Sans",-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#131d33;color:#e2e8f0;line-height:1.6}
 a{color:#fbbf24}header,main,footer{max-width:960px;margin:0 auto;padding:0 16px}
 header{display:flex;justify-content:space-between;align-items:center;padding-top:18px;padding-bottom:18px;border-bottom:1px solid #ffffff14}
 .brand{font-weight:800;font-size:20px;color:#fff;text-decoration:none}.brand span{color:#f59e0b}
 h1{font-size:clamp(26px,5vw,38px);line-height:1.2;color:#fff;margin:28px 0 12px}h2{color:#fff;font-size:22px;margin:32px 0 10px}
 .lead{color:#cbd5e1;font-size:17px}.cta{display:inline-block;background:#f59e0b;color:#0f172a;font-weight:700;padding:14px 20px;border-radius:12px;text-decoration:none;margin:8px 8px 8px 0}
 .cta.ghost{background:transparent;color:#fbbf24;border:1px solid #fbbf2466}
-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:15px}th,td{padding:8px 10px;border-bottom:1px solid #ffffff14;text-align:left;vertical-align:top}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0}table{width:100%;min-width:520px;border-collapse:collapse;margin:8px 0;font-size:15px}th,td{padding:8px 10px;border-bottom:1px solid #ffffff14;text-align:left;vertical-align:top}
 th{color:#94a3b8;font-weight:600;font-size:13px}.n{text-align:right;white-space:nowrap}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}.card{background:#192540;border:1px solid #ffffff14;border-radius:16px;padding:16px;text-decoration:none;color:#e2e8f0}
 .card b{color:#fff;display:block}.muted{color:#94a3b8;font-size:14px}footer{padding-top:28px;padding-bottom:40px;color:#94a3b8;font-size:14px;border-top:1px solid #ffffff14;margin-top:40px}
@@ -94,7 +94,7 @@ function layoutTable(list: ApartmentLayout[]): string {
       return `<tr><td><b>${esc(l.series)}</b>, ${l.rooms}-комн.</td><td class="n">${l.areaSqm} м²</td><td class="n">${l.ceilingHeight} м</td><td class="n">${kgs(round1000(std))} – ${kgs(round1000(prem))}</td><td><a href="${esc(estimateLink(l))}">Рассчитать</a></td></tr>`;
     })
     .join('');
-  return `<table><thead><tr><th>Планировка</th><th class="n">Площадь</th><th class="n">Потолки</th><th class="n">Ремонт под ключ*</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+  return `<div class="tw"><table><thead><tr><th>Планировка</th><th class="n">Площадь</th><th class="n">Потолки</th><th class="n">Ремонт под ключ*</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
 <p class="muted">* Ориентировочно, по базовым ценам от класса «Стандарт» до «Премиум», работы и материалы. Точная сумма по каждой работе — в онлайн-смете и после бесплатного замера.</p>`;
 }
 
@@ -173,7 +173,7 @@ for (const s of SERIES) {
       h1: 'Цены на ремонтные работы в Бишкеке',
       body: `<p class="lead">Стоимость каждой работы за единицу: отдельно работа бригады и материалы (от класса «Стандарт» до «Премиум»).</p>
 <a class="cta" href="/#estimate">Посчитать смету для своей квартиры</a>
-<table><thead><tr><th>Работа</th><th class="n">Работа</th><th class="n">Материалы</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="tw"><table><thead><tr><th>Работа</th><th class="n">Работа</th><th class="n">Материалы</th></tr></thead><tbody>${rows}</tbody></table></div>
 <p class="muted">Цены указаны за единицу: м², погонный метр или штуку. Итоговая стоимость фиксируется в договоре после замера.</p>
 <script>
 (function(){var U=${JSON.stringify(units)};
