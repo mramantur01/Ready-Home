@@ -23,6 +23,7 @@ import { findFinish } from '../data/finishCatalog.ts';
 import { FinishCatalogEditor } from './FinishCatalogEditor.tsx';
 import { LayoutsEditor } from './LayoutsEditor.tsx';
 import { StatsPanel } from './StatsPanel.tsx';
+import { ScheduleEditor } from './ScheduleEditor.tsx';
 import { openContract } from '../data/contractPrint.ts';
 import { buyLabel, computeShoppingList } from '../data/materialsCatalog.ts';
 import { ASSET_IMAGES } from '../data/defaultContent.ts';
@@ -1253,6 +1254,9 @@ export function AdminPanelModal({
               )}
 
               {/* 8. CONTACTS */}
+              {activeTab === 'contacts' && (
+                <ScheduleEditor schedule={draft.schedule} onChange={(schedule) => setDraft({ ...draft, schedule })} />
+              )}
               {activeTab === 'contacts' && (
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div className="sm:col-span-2">

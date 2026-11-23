@@ -36,7 +36,7 @@ import type {
   SiteContent,
   Visual3DConfig,
 } from './src/types.ts';
-import type { ApartmentLayout, FinishGroupConfig, FinishOptionConfig, ReviewItem, WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
+import type { ApartmentLayout, FinishGroupConfig, ScheduleConfig, FinishOptionConfig, ReviewItem, WorkBasis, WorkEstimate, WorkItem, WorkSelection, WorkStageId, WorkUnit } from './src/types.ts';
 import { calculateRenovationEstimate } from './src/data/defaultContent.ts';
 import {
   clampParams,
@@ -46,6 +46,7 @@ import {
   WORK_STAGES,
 } from './src/data/workCatalog.ts';
 import { FINISH_GROUPS, sanitizeFinishes } from './src/data/finishCatalog.ts';
+import { buildSlots, isSlotFree } from './src/data/schedule.ts';
 
 const CLIENT_COOKIE = 'rh_client_session';
 const ADMIN_COOKIE = 'rh_admin_session';
@@ -142,6 +143,29 @@ function sanitizeLayouts(input: unknown[]): ApartmentLayout[] {
     });
   }
   return out;
+}
+
+function sanitizeSchedule(raw: Partial<ScheduleConfig>, cur: ScheduleConfig): ScheduleConfig {
+  const workDays = (Array.isArray(raw.workDays) ? raw.workDays : cur.workDays)
+    .map((d) => Math.round(Number(d)))
+    .filter((d, i, a) => d >= 0 && d <= 6 && a.indexOf(d) === i)
+    .sort();
+  const slots = (Array.isArray(raw.slots) ? raw.slots : cur.slots)
+    .map((t) => String(t))
+    .filter((t, i, a) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t) && a.indexOf(t) === i)
+    .sort()
+    .slice(0, 24);
+  const blockedDates = (Array.isArray(raw.blockedDates) ? raw.blockedDates : cur.blockedDates)
+    .map((d) => String(d))
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .slice(0, 100);
+  return {
+    workDays,
+    slots: slots.length ? slots : cur.slots,
+    perSlot: Math.max(1, Math.min(20, Math.round(Number(raw.perSlot) || cur.perSlot))),
+    blockedDates,
+    leadHours: Math.max(0, Math.min(72, Math.round(Number(raw.leadHours ?? cur.leadHours)))),
+  };
 }
 
 function withRuFallback(name: LocalizedText): LocalizedText {
@@ -418,6 +442,7 @@ export function createApp() {
         ? sanitizeFinishCatalog(body.finishCatalog, cur.finishCatalog)
         : cur.finishCatalog,
       layouts: Array.isArray(body.layouts) ? sanitizeLayouts(body.layouts) : cur.layouts,
+      schedule: body.schedule && typeof body.schedule === 'object' ? sanitizeSchedule(body.schedule, cur.schedule) : cur.schedule,
       installment: body.installment && typeof body.installment === 'object'
         ? {
             enabled: Boolean(body.installment.enabled),
@@ -690,6 +715,12 @@ export function createApp() {
   // ------------------------------------------------------------------
   // QUICK LEAD (/api/leads): name + phone, no account needed
   // ------------------------------------------------------------------
+  app.get('/api/slots', async (req, res) => {
+    const db = await getDb();
+    const days = Math.max(1, Math.min(31, Math.round(Number(req.query.days) || 14)));
+    res.json({ days: buildSlots(db.content.schedule, db.bookings, days) });
+  });
+
   app.post('/api/leads', async (req, res) => {
     // Honeypot: real visitors never fill the hidden "website" field.
     if (clampStr(req.body?.website, 100)) {
@@ -794,6 +825,10 @@ export function createApp() {
     const time = clampStr(req.body?.time, 16);
     if (!date || !time) {
       res.status(400).json({ error: 'Выберите дату и время выезда замерщика.' });
+      return;
+    }
+    if (!adminSession && !isSlotFree(db.content.schedule, db.bookings, date, time)) {
+      res.status(409).json({ error: 'Это время уже занято или недоступно. Выберите другое окно.' });
       return;
     }
 

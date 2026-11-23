@@ -1,6 +1,7 @@
 import type { PropertyType, MaterialTier, SiteContent, ReviewItem, Visual3DConfig } from '../types.ts';
 import { DEFAULT_PRICE_LIST } from './workCatalog.ts';
 import { FINISH_GROUPS } from './finishCatalog.ts';
+import { DEFAULT_SCHEDULE } from './schedule.ts';
 
 export const ASSET_IMAGES = {
   heroLiving: '/src/assets/images/hero_living_luxury_1795408666796.jpg',
@@ -546,6 +547,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     note: '',
   },
   layouts: [],
+  schedule: DEFAULT_SCHEDULE,
 };
 
 export const DEFAULT_REVIEWS: ReviewItem[] = [

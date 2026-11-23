@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -27,6 +27,7 @@ import {
 } from '../data/defaultContent.ts';
 import { formatKgs, PROPERTY_LABELS, TIER_LABELS, tLoc } from '../i18n.ts';
 import { apiFetch } from '../apiClient.ts';
+import type { DaySlots } from '../data/schedule.ts';
 import { SmartImage } from './SmartImage.tsx';
 
 interface BookingModalProps {
@@ -40,7 +41,6 @@ interface BookingModalProps {
   onOpenCabinet: () => void;
 }
 
-const TIME_SLOTS = ['09:30', '11:00', '13:00', '15:00', '17:00', '18:30'];
 const ROOM_COUNTS = ['Студия', '1-комн', '2-комн', '3-комн', '4+ комн / Дом'];
 
 export function BookingModal({
@@ -66,9 +66,25 @@ export function BookingModal({
   );
   const [masterId, setMasterId] = useState(content.masters[0]?.id || '');
 
-  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const [date, setDate] = useState(tomorrow);
-  const [time, setTime] = useState('11:00');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [calendar, setCalendar] = useState<DaySlots[] | null>(null);
+
+  // Live calendar of free measurement slots; pick the first free one by default.
+  const loadSlots = async () => {
+    const res = await apiFetch<{ days?: DaySlots[] }>('/api/slots?days=14');
+    if (!res.ok || !Array.isArray(res.data.days)) return;
+    setCalendar(res.data.days);
+    const firstDay = res.data.days.find((d) => d.slots.some((s) => s.free > 0));
+    if (firstDay && !date) {
+      setDate(firstDay.date);
+      setTime(firstDay.slots.find((s) => s.free > 0)?.time || '');
+    }
+  };
+  useEffect(() => {
+    void loadSlots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [clientName, setClientName] = useState(profile.name);
   const [comment, setComment] = useState('');
@@ -510,38 +526,62 @@ export function BookingModal({
                     4. Дата и время бесплатного выезда на замер
                   </label>
                   <div>
-                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">
-                      Выберите дату
+                    <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5 inline-flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-amber-500" /> Выберите день — показаны только свободные окна
                     </label>
-                    <div className="relative">
-                      <Calendar className="w-4 h-4 text-amber-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <input
-                        type="date"
-                        min={new Date().toISOString().slice(0, 10)}
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 text-sm text-slate-900 dark:text-white tabular-nums"
-                      />
-                    </div>
+                    {!calendar ? (
+                      <div className="h-16 rounded-xl bg-slate-100 dark:bg-white/5 animate-pulse" />
+                    ) : (
+                      <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-1 px-1">
+                        {calendar.map((d) => {
+                          const free = d.slots.filter((s) => s.free > 0).length;
+                          const dt = new Date(d.date + 'T00:00:00Z');
+                          const active = d.date === date;
+                          return (
+                            <button
+                              key={d.date}
+                              type="button"
+                              disabled={free === 0}
+                              onClick={() => {
+                                setDate(d.date);
+                                setTime(d.slots.find((s) => s.free > 0)?.time || '');
+                              }}
+                              className={`shrink-0 w-16 py-2 rounded-xl border text-center cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+                                active
+                                  ? 'bg-amber-500 border-amber-500 text-slate-950'
+                                  : 'border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200'
+                              }`}
+                            >
+                              <div className="text-[10px] uppercase">
+                                {['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][d.weekday]}
+                              </div>
+                              <div className="text-base font-bold tabular-nums">{dt.getUTCDate()}</div>
+                              <div className="text-[10px]">{d.closed ? 'вых.' : free ? `${free} окон` : 'занято'}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div>
                     <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">
-                      Удобное время визита
+                      Время визита
                     </label>
                     <div className="grid grid-cols-3 gap-2">
-                      {TIME_SLOTS.map((slot) => (
+                      {(calendar?.find((d) => d.date === date)?.slots || []).map((slot) => (
                         <button
-                          key={slot}
+                          key={slot.time}
                           type="button"
-                          onClick={() => setTime(slot)}
-                          className={`py-2.5 rounded-xl text-sm font-medium border tabular-nums transition-colors cursor-pointer ${
-                            time === slot
+                          disabled={slot.free === 0}
+                          onClick={() => setTime(slot.time)}
+                          className={`py-2.5 rounded-xl text-sm font-medium border tabular-nums transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 disabled:line-through ${
+                            time === slot.time
                               ? 'bg-amber-500 text-slate-950 border-amber-500 font-semibold'
                               : 'border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-amber-500/50'
                           }`}
                         >
-                          {slot}
+                          {slot.time}
                         </button>
                       ))}
                     </div>

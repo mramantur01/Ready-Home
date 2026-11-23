@@ -120,6 +120,16 @@ export interface SiteContent {
   finishCatalog: FinishGroupConfig[];
   installment: InstallmentConfig;
   layouts: ApartmentLayout[]; // the studio's own layouts (ЖК plans), shown before the typical series
+  schedule: ScheduleConfig;
+}
+
+// Free-measurement calendar (admin → "График и контакты").
+export interface ScheduleConfig {
+  workDays: number[]; // 0 = Sunday … 6 = Saturday
+  slots: string[]; // "HH:MM", Bishkek time
+  perSlot: number; // measurements possible at the same time
+  blockedDates: string[]; // holidays, "YYYY-MM-DD"
+  leadHours: number; // how soon a visit can be booked
 }
 
 export interface LayoutSpace {
