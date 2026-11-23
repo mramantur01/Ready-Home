@@ -3,6 +3,7 @@ import { ArrowRight, Bookmark, Check, ChevronDown, ClipboardList, FileDown, Paus
 import type {
   ApartmentLayout,
   ApartmentParams,
+  BeforeAfterItem,
   BookingDraft,
   ContactsConfig,
   FinishChoices,
@@ -27,6 +28,8 @@ import { formatKgs, TIER_LABELS, tLoc } from '../i18n.ts';
 import { StageVisual } from './StageVisual.tsx';
 import { PaymentPlan } from './PaymentPlan.tsx';
 import { ShoppingList } from './ShoppingList.tsx';
+import { PhotoDesign } from './PhotoDesign.tsx';
+import { SimilarProjects } from './SimilarProjects.tsx';
 import { track } from '../analytics.ts';
 import { LayoutPicker } from './LayoutPicker.tsx';
 import { layoutTitle, TYPICAL_LAYOUTS } from '../data/layoutCatalog.ts';
@@ -165,6 +168,7 @@ interface EstimateSectionProps {
   finishCatalog: FinishGroup[];
   installment: InstallmentConfig;
   layouts: ApartmentLayout[];
+  portfolio: BeforeAfterItem[];
   lang: Lang;
   contacts: ContactsConfig;
   onBook: (draft: BookingDraft) => void;
@@ -181,6 +185,7 @@ export function EstimateSection({
   finishCatalog,
   installment,
   layouts,
+  portfolio,
   lang,
   contacts,
   onBook,
@@ -710,6 +715,17 @@ export function EstimateSection({
               </ol>
             </div>
 
+            <PhotoDesign
+              lang={lang}
+              catalog={finishCatalog}
+              onApply={(f) => {
+                track('finish_pick');
+                setFinishes((cur) => ({ ...cur, ...f }));
+                setPreviewIdx(null);
+                document.getElementById('estimate')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            />
+
             <ShoppingList estimate={estimate} lang={lang} />
           </div>
 
@@ -771,6 +787,8 @@ export function EstimateSection({
                 </div>
               )}
             </div>
+
+            <SimilarProjects items={portfolio} params={params} lang={lang} />
 
             <div className="rounded-3xl bg-slate-900 dark:bg-[#0e172a] text-white border border-slate-800 dark:border-amber-500/25 p-5 sm:p-6">
               <div className="space-y-2 text-sm">

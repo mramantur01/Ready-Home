@@ -41,6 +41,7 @@ import { LazyStudio3D } from './components/LazyStudio3D.tsx';
 import { CalculatorSection } from './components/CalculatorSection.tsx';
 import { EstimateSection } from './components/EstimateSection.tsx';
 import { QuickLeadModal } from './components/QuickLeadModal.tsx';
+import { AiChatWidget } from './components/AiChatWidget.tsx';
 import { track } from './analytics.ts';
 import { BeforeAfterSlider } from './components/BeforeAfterSlider.tsx';
 import { BookingModal } from './components/BookingModal.tsx';
@@ -806,6 +807,7 @@ export default function App() {
         finishCatalog={content.finishCatalog}
         installment={content.installment}
         layouts={content.layouts}
+        portfolio={content.beforeAfter}
         lang={lang}
         contacts={content.contacts}
         onBook={(draft) => requestBooking(draft)}
@@ -1018,6 +1020,30 @@ export default function App() {
               </span>
             </div>
           </div>
+          {(content.contacts.twoGisUrl || content.contacts.yandexMapsUrl) && (
+            <div className="-mt-6 mb-8 flex flex-wrap gap-2 text-sm">
+              {content.contacts.twoGisUrl && (
+                <a
+                  href={content.contacts.twoGisUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-2 rounded-xl border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-medium hover:bg-emerald-500/10"
+                >
+                  Отзывы о нас в 2ГИС
+                </a>
+              )}
+              {content.contacts.yandexMapsUrl && (
+                <a
+                  href={content.contacts.yandexMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-2 rounded-xl border border-amber-500/40 text-amber-700 dark:text-amber-300 font-medium hover:bg-amber-500/10"
+                >
+                  Отзывы в Яндекс Картах
+                </a>
+              )}
+            </div>
+          )}
 
           <div className="grid lg:grid-cols-12 gap-6 items-start">
             <div className="lg:col-span-7 space-y-4">
@@ -1305,6 +1331,8 @@ export default function App() {
 
       {/* 15. FLOATING WHATSAPP WIDGET */}
       <FloatingWhatsApp contacts={content.contacts} onOpenBooking={() => requestBooking({})} />
+
+      <AiChatWidget lang={lang} />
 
       {/* MODALS */}
       <QuickLeadModal

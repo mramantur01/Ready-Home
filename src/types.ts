@@ -77,6 +77,7 @@ export interface BeforeAfterItem {
   budgetKgs: number;
   beforeImage: string;
   afterImage: string;
+  rooms?: number; // used to show "similar projects" next to the estimate
 }
 
 export interface InstagramPost {

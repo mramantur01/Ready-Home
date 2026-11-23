@@ -380,3 +380,29 @@ export async function deletePhoto(id: string): Promise<void> {
   }
   await redis([['DEL', PHOTO_PREFIX + id]]);
 }
+
+// ------------------------------------------------------------------
+// Simple fixed-window rate limits (AI endpoints), keyed by a hashed client id.
+// ------------------------------------------------------------------
+const memHits = new Map<string, { n: number; until: number }>();
+
+export async function hitLimit(key: string, limit: number, windowSec: number): Promise<boolean> {
+  const k = `${P}rl:${key}`;
+  if (!getUpstashConfig()) {
+    const now = Date.now();
+    const cur = memHits.get(k);
+    const entry = cur && cur.until > now ? cur : { n: 0, until: now + windowSec * 1000 };
+    entry.n += 1;
+    memHits.set(k, entry);
+    return entry.n > limit;
+  }
+  try {
+    const [n] = await redis([
+      ['INCR', k],
+      ['EXPIRE', k, String(windowSec), 'NX'],
+    ]);
+    return Number(n) > limit;
+  } catch {
+    return false; // never block visitors because the limiter is down
+  }
+}

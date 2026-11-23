@@ -25,6 +25,7 @@ import { LayoutsEditor } from './LayoutsEditor.tsx';
 import { StatsPanel } from './StatsPanel.tsx';
 import { ScheduleEditor } from './ScheduleEditor.tsx';
 import { ProjectEditor } from './ProjectEditor.tsx';
+import { PortfolioEditor } from './PortfolioEditor.tsx';
 import { openContract } from '../data/contractPrint.ts';
 import { buyLabel, computeShoppingList } from '../data/materialsCatalog.ts';
 import { ASSET_IMAGES } from '../data/defaultContent.ts';
@@ -1163,55 +1164,7 @@ export function AdminPanelModal({
                       <Plus className="w-3.5 h-3.5" /> Добавить объект
                     </button>
                   </div>
-                  {draft.beforeAfter.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      className="p-4 rounded-2xl bg-slate-50 dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 grid sm:grid-cols-12 gap-2.5 items-center"
-                    >
-                      <input
-                        type="text"
-                        value={item.title.ru}
-                        onChange={(e) => {
-                          const list = [...draft.beforeAfter];
-                          list[idx] = { ...item, title: { ...item.title, ru: e.target.value } };
-                          setDraft({ ...draft, beforeAfter: list });
-                        }}
-                        className="sm:col-span-5 px-3 py-2 rounded-xl bg-white dark:bg-[#16213a] border border-slate-200 dark:border-white/10 text-sm"
-                      />
-                      <input
-                        type="number"
-                        value={item.areaSqm}
-                        onChange={(e) => {
-                          const list = [...draft.beforeAfter];
-                          list[idx] = { ...item, areaSqm: Number(e.target.value) || 80 };
-                          setDraft({ ...draft, beforeAfter: list });
-                        }}
-                        className="sm:col-span-2 px-3 py-2 rounded-xl bg-white dark:bg-[#16213a] border border-slate-200 dark:border-white/10 text-sm tabular-nums"
-                      />
-                      <input
-                        type="number"
-                        value={item.budgetKgs}
-                        onChange={(e) => {
-                          const list = [...draft.beforeAfter];
-                          list[idx] = { ...item, budgetKgs: Number(e.target.value) || 1000000 };
-                          setDraft({ ...draft, beforeAfter: list });
-                        }}
-                        className="sm:col-span-3 px-3 py-2 rounded-xl bg-white dark:bg-[#16213a] border border-slate-200 dark:border-white/10 text-sm tabular-nums"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDraft({
-                            ...draft,
-                            beforeAfter: draft.beforeAfter.filter((x) => x.id !== item.id),
-                          })
-                        }
-                        className="sm:col-span-2 text-rose-500 text-xs font-medium inline-flex items-center justify-end gap-1 cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" /> Удалить
-                      </button>
-                    </div>
-                  ))}
+                  <PortfolioEditor items={draft.beforeAfter} onChange={(beforeAfter) => setDraft({ ...draft, beforeAfter })} />
                 </div>
               )}
 

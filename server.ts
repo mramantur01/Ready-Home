@@ -21,6 +21,7 @@ import {
   deletePhoto,
   getPhoto,
   getStats,
+  hitLimit,
   incrStat,
   putPhoto,
   listBackups,
@@ -50,6 +51,7 @@ import {
 } from './src/data/workCatalog.ts';
 import { FINISH_GROUPS, sanitizeFinishes } from './src/data/finishCatalog.ts';
 import { buildSlots, isSlotFree } from './src/data/schedule.ts';
+import { aiEnabled, chat as aiChat, designFromPhoto, type ChatMessage } from './server/ai.ts';
 
 const CLIENT_COOKIE = 'rh_client_session';
 const ADMIN_COOKIE = 'rh_admin_session';
@@ -435,6 +437,7 @@ export function createApp() {
             budgetKgs: Math.max(50000, Math.min(90000000, Math.round(Number(b.budgetKgs) || 1200000))),
             beforeImage: sanitizeUrl(b.beforeImage, cur.beforeAfter[0]?.beforeImage || ''),
             afterImage: sanitizeUrl(b.afterImage, cur.beforeAfter[0]?.afterImage || ''),
+            rooms: Number(b.rooms) >= 1 && Number(b.rooms) <= 5 ? Math.round(Number(b.rooms)) : undefined,
           }))
         : cur.beforeAfter,
       instagramPosts: Array.isArray(body.instagramPosts)
@@ -811,6 +814,69 @@ export function createApp() {
     res.setHeader('Content-Type', m[1]);
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.send(Buffer.from(m[2], 'base64'));
+  });
+
+  // ------------------------------------------------------------------
+  // AI (Gemini): consultant chat + finishes from a room photo. Off without GEMINI_API_KEY.
+  // ------------------------------------------------------------------
+  const clientKey = (req: express.Request) => {
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    return crypto.createHash('sha256').update(`rh:${ip}`).digest('hex').slice(0, 24);
+  };
+
+  app.get('/api/ai/status', (_req, res) => {
+    res.json({ enabled: aiEnabled() });
+  });
+
+  app.post('/api/ai/chat', async (req, res) => {
+    if (!aiEnabled()) {
+      res.status(503).json({ error: 'ИИ-консультант пока не подключён.' });
+      return;
+    }
+    if ((await hitLimit(`chat:${clientKey(req)}`, 30, 3600)) || (await hitLimit('chat:all', 1500, 86400))) {
+      res.status(429).json({ error: 'Слишком много вопросов подряд. Напишите нам в WhatsApp — ответим лично.' });
+      return;
+    }
+    const raw = Array.isArray(req.body?.messages) ? (req.body.messages as unknown[]) : [];
+    const history: ChatMessage[] = raw
+      .slice(-10)
+      .filter((m): m is { role: unknown; text: unknown } => Boolean(m) && typeof m === 'object')
+      .map((m) => ({ role: m.role === 'model' ? ('model' as const) : ('user' as const), text: clampStr(m.text, 800) }))
+      .filter((m) => m.text);
+    if (!history.length || history[history.length - 1].role !== 'user') {
+      res.status(400).json({ error: 'Пустой вопрос.' });
+      return;
+    }
+    try {
+      const db = await getDb();
+      res.json({ reply: await aiChat(db.content, history) });
+    } catch (err) {
+      console.error('ai chat failed', err);
+      res.status(502).json({ error: 'Консультант временно недоступен. Напишите нам в WhatsApp.' });
+    }
+  });
+
+  app.post('/api/ai/design', async (req, res) => {
+    if (!aiEnabled()) {
+      res.status(503).json({ error: 'Подбор по фото пока не подключён.' });
+      return;
+    }
+    if ((await hitLimit(`design:${clientKey(req)}`, 6, 3600)) || (await hitLimit('design:all', 200, 86400))) {
+      res.status(429).json({ error: 'Лимит подборов на сегодня исчерпан. Попробуйте позже.' });
+      return;
+    }
+    const m = String(req.body?.data || '').match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+    if (!m || m[2].length > 1_700_000) {
+      res.status(400).json({ error: 'Загрузите фото комнаты (JPEG, PNG или WebP).' });
+      return;
+    }
+    try {
+      const db = await getDb();
+      res.json({ options: await designFromPhoto(db.content, m[1], m[2]) });
+    } catch (err) {
+      console.error('ai design failed', err);
+      res.status(502).json({ error: 'Не удалось подобрать отделку. Попробуйте другое фото.' });
+    }
   });
 
   app.get('/api/slots', async (req, res) => {
